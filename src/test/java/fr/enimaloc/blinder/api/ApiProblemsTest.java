@@ -125,12 +125,29 @@ class ApiProblemsTest {
     }
 
     @Test
-    void unparsableQueryParametersAre400Problems() throws Exception {
-        perform(get("/_/api/v1/stats").param("link", "not-a-uuid")).andExpect(status().isBadRequest());
-        perform(get("/_/api/v1/stats").param("tag", "not-a-uuid")).andExpect(status().isBadRequest());
-        perform(get("/_/api/v1/stats").param("days", "abc")).andExpect(status().isBadRequest());
-        perform(get("/_/api/v1/links").param("domain", "x")).andExpect(status().isBadRequest());
-        perform(get("/_/api/v1/links").param("page", "x")).andExpect(status().isBadRequest());
+    void unparsableQueryParametersAre400ProblemsNamingTheParameterWithoutEchoingIt() throws Exception {
+        String[][] cases = {
+                {"/_/api/v1/stats", "link", "not-a-uuid"},
+                {"/_/api/v1/stats", "tag", "not-a-uuid"},
+                {"/_/api/v1/stats", "days", "abc"},
+                {"/_/api/v1/links", "domain", "zzz"},
+                {"/_/api/v1/links", "page", "zzz"},
+        };
+        for (String[] c : cases) {
+            perform(get(c[0]).param(c[1], c[2]))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.status").value(400))
+                    .andExpect(jsonPath("$.detail").value("Paramètre invalide : " + c[1]))
+                    .andExpect(content().string(not(containsString(c[2]))))
+                    .andExpect(content().string(not(containsString("Failed to convert"))));
+        }
+    }
+
+    @Test
+    void unparsablePathVariableIs400ProblemNamingTheVariable() throws Exception {
+        perform(get("/_/api/v1/links/zzz-not-an-id"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail").value("Paramètre invalide : id"));
     }
 
     record Body(@NotBlank(message = "Nom requis") String name) {
