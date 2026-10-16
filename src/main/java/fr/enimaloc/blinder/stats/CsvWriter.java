@@ -31,13 +31,28 @@ public final class CsvWriter {
         if (value == null || value.isEmpty()) {
             return "";
         }
-        String v = value;
-        char first = v.charAt(0);
-        if (first == '=' || first == '+' || first == '-' || first == '@' || first == '\t' || first == '\r') {
-            v = "'" + v;
-        }
+        String v = formula(value) ? "'" + value : value;
         boolean quote = v.indexOf(',') >= 0 || v.indexOf('"') >= 0 || v.indexOf('\n') >= 0 || v.indexOf('\r') >= 0
                 || v.startsWith(" ") || v.endsWith(" ");
         return quote ? '"' + v.replace("\"", "\"\"") + '"' : v;
+    }
+
+    /**
+     * Les tableurs ignorent espaces et caractères de contrôle en tête de cellule : on teste le premier caractère
+     * significatif (y compris les variantes pleine chasse), et tout début par tabulation ou retour chariot/ligne.
+     */
+    private static boolean formula(String v) {
+        char first = v.charAt(0);
+        if (first == '\t' || first == '\r' || first == '\n') {
+            return true;
+        }
+        for (int i = 0; i < v.length(); i++) {
+            char c = v.charAt(i);
+            if (Character.isWhitespace(c) || Character.isSpaceChar(c) || Character.isISOControl(c)) {
+                continue;
+            }
+            return "=+-@\uFF1D\uFF0B\uFF0D\uFF20".indexOf(c) >= 0;
+        }
+        return false;
     }
 }

@@ -19,6 +19,20 @@ class CsvWriterTest {
     }
 
     @Test
+    void neutralisesFormulasHiddenBehindWhitespaceControlsOrFullwidth() {
+        assertThat(CsvWriter.cell("  =1+1")).isEqualTo("'  =1+1");
+        assertThat(CsvWriter.cell("\n=cmd")).isEqualTo("\"'\n=cmd\"");
+        assertThat(CsvWriter.cell("\u0000=x")).isEqualTo("'\u0000=x");
+        assertThat(CsvWriter.cell("\uFF1D1+1")).isEqualTo("'\uFF1D1+1");
+        assertThat(CsvWriter.cell("\uFF20SUM(A1)")).isEqualTo("'\uFF20SUM(A1)");
+        assertThat(CsvWriter.cell("\uFF0B1")).isEqualTo("'\uFF0B1");
+        assertThat(CsvWriter.cell("\uFF0D1")).isEqualTo("'\uFF0D1");
+        assertThat(CsvWriter.cell("-5")).isEqualTo("'-5");
+        assertThat(CsvWriter.cell("a-b")).isEqualTo("a-b");
+        assertThat(CsvWriter.cell(" plain ")).isEqualTo("\" plain \"");
+    }
+
+    @Test
     void quotesWhenNeeded() {
         assertThat(CsvWriter.cell("a,b")).isEqualTo("\"a,b\"");
         assertThat(CsvWriter.cell("say \"hi\"")).isEqualTo("\"say \"\"hi\"\"\"");
