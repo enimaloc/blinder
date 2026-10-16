@@ -75,6 +75,12 @@ public class TriggerLocks {
         entries.computeIfPresent(key, (k, e) -> --e.users == 0 ? null : e);
     }
 
+    /** Un thread attend-il le verrou de (lien, type) ? (tests) */
+    boolean hasWaiters(UUID linkId, TriggerType type) {
+        Entry entry = entries.get(new Key(linkId, type));
+        return entry != null && entry.lock.hasQueuedThreads();
+    }
+
     /** Nombre de clés suivies (tests). */
     int size() {
         return entries.size();
