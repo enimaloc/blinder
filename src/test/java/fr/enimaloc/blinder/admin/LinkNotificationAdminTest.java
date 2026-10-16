@@ -114,6 +114,44 @@ class LinkNotificationAdminTest {
     }
 
     @Test
+    void foreignChannelOnUpdateIsFieldErrorAndLinkUnchanged() throws Exception {
+        NotificationChannel mine = data.channel(admin, "C", ChannelType.EMAIL, "a@example.com");
+        mvc.perform(createLink("promo").param("notifyExhausted", "true")
+                .param("notifyChannelIds", mine.getId().toString()));
+        Link link = links.findAll().getFirst();
+        NotificationChannel theirs = data.channel(data.admin("other"), "Leur", ChannelType.EMAIL, "b@example.com");
+        mvc.perform(post("/_/links/" + link.getId()).with(asAdmin).with(csrf())
+                        .param("domainId", domain.getId().toString())
+                        .param("slug", "changed")
+                        .param("targetUrl", "https://example.com/changed")
+                        .param("redirectStatus", "302")
+                        .param("metaMode", "NONE")
+                        .param("notifyExhausted", "true")
+                        .param("notifyChannelIds", theirs.getId().toString())
+                        .param("version", String.valueOf(link.getVersion())))
+                .andExpect(status().isOk())
+                .andExpect(model().attributeHasFieldErrors("form", "notifyChannelIds"));
+        Link after = links.findById(link.getId()).orElseThrow();
+        assertThat(after.getSlug()).isEqualTo("promo");
+        assertThat(after.getTargetUrl()).isEqualTo("https://example.com/");
+        assertThat(settings.findWithChannelsByLinkId(link.getId()).orElseThrow().getChannels())
+                .extracting(NotificationChannel::getId).containsExactly(mine.getId());
+    }
+
+    @Test
+    void deletingAnAttachedChannelDetachesItAndKeepsTheLink() throws Exception {
+        NotificationChannel c = data.channel(admin, "C", ChannelType.EMAIL, "a@example.com");
+        mvc.perform(createLink("promo").param("notifyExhausted", "true")
+                .param("notifyChannelIds", c.getId().toString()));
+        Link link = links.findAll().getFirst();
+        mvc.perform(post("/_/notifications/channels/" + c.getId() + "/delete").with(asAdmin).with(csrf()))
+                .andExpect(redirectedUrl("/_/notifications"));
+        assertThat(links.findById(link.getId())).isPresent();
+        assertThat(channelRepo.findById(c.getId())).isEmpty();
+        assertThat(settings.findWithChannelsByLinkId(link.getId()).orElseThrow().getChannels()).isEmpty();
+    }
+
+    @Test
     void uncheckingEverythingDeletesSettings() throws Exception {
         NotificationChannel c = data.channel(admin, "C", ChannelType.EMAIL, "a@example.com");
         mvc.perform(createLink("promo").param("notifyExhausted", "true")

@@ -7,7 +7,6 @@ import fr.enimaloc.blinder.link.LinkRepository;
 import fr.enimaloc.blinder.notification.DeliveryDispatcher;
 import fr.enimaloc.blinder.notification.NotificationChannel;
 import fr.enimaloc.blinder.notification.NotificationChannelRepository;
-import fr.enimaloc.blinder.notification.WebhookSignatures;
 import fr.enimaloc.blinder.stats.VisitWriter;
 import fr.enimaloc.blinder.support.TestData;
 import fr.enimaloc.blinder.user.BlinderUserDetails;
@@ -123,8 +122,7 @@ class LotFourEndToEndTest {
 
         assertThat(received).extracting(Received::event).containsExactlyInAnyOrder("VISIT", "VISIT", "EXHAUSTED");
         for (Received r : received) {
-            assertThat(r.signature()).isEqualTo(
-                    WebhookSignatures.sign(channel.getSecret(), Long.parseLong(r.timestamp()), r.body()));
+            assertThat(r.signature()).isEqualTo(hmac(channel.getSecret(), r.timestamp() + "." + r.body()));
             assertThat(r.body()).doesNotContain("https://example.com/promo").contains("go.example.com");
         }
 
@@ -137,5 +135,16 @@ class LotFourEndToEndTest {
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
         assertThat(csv.split("\r\n")).hasSize(4);
+    }
+
+    /** Calcul indépendant de la signature (pas {@code WebhookSignatures}) : {@code sha256=} + HMAC-SHA256 hex. */
+    private static String hmac(String secret, String message) throws Exception {
+        javax.crypto.Mac mac = javax.crypto.Mac.getInstance("HmacSHA256");
+        mac.init(new javax.crypto.spec.SecretKeySpec(secret.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
+        StringBuilder hex = new StringBuilder("sha256=");
+        for (byte b : mac.doFinal(message.getBytes(StandardCharsets.UTF_8))) {
+            hex.append(String.format("%02x", b));
+        }
+        return hex.toString();
     }
 }

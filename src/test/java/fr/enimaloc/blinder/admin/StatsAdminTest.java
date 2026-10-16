@@ -14,6 +14,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
@@ -41,6 +42,8 @@ class StatsAdminTest {
     VisitRepository visits;
     @Autowired
     LinkRepository links;
+    @MockitoSpyBean
+    fr.enimaloc.blinder.stats.VisitWriter visitWriter;
 
     User admin;
     Link link;
@@ -83,7 +86,15 @@ class StatsAdminTest {
         mvc.perform(get("/_/stats").param("days", "30").with(login(admin)))
                 .andExpect(content().string(org.hamcrest.Matchers.not(containsString("conservées moins longtemps"))));
     }
-    // Avis « visites perdues » (dropped > 0) : non testé ici, la file ne se sature pas sans thread d'écriture bloqué.
+
+    @Test
+    void droppedVisitsNoticeShownOnlyWhenSomeWereDropped() throws Exception {
+        mvc.perform(get("/_/stats").with(login(admin)))
+                .andExpect(content().string(org.hamcrest.Matchers.not(containsString("visite(s) perdue(s)"))));
+        org.mockito.Mockito.doReturn(3L).when(visitWriter).dropped();
+        mvc.perform(get("/_/stats").with(login(admin)))
+                .andExpect(content().string(containsString("3 visite(s) perdue(s)")));
+    }
 
     @Test
     void anotherOwnersLinkIs404() throws Exception {

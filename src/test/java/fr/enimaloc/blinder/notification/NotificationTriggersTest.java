@@ -17,6 +17,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.support.TransactionTemplate;
 import tools.jackson.databind.JsonNode;
@@ -25,6 +26,7 @@ import tools.jackson.databind.json.JsonMapper;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.UUID;
 import java.util.function.Consumer;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -65,6 +67,8 @@ class NotificationTriggersTest {
     NotificationChannelRepository channelRepo;
     @Autowired
     TransactionTemplate transactions;
+    @MockitoSpyBean
+    DeliveryService deliveryService;
 
     User admin;
     Domain domain;
@@ -225,6 +229,29 @@ class NotificationTriggersTest {
         mvc.perform(get("http://go.example.com/plain")).andExpect(status().is3xxRedirection());
         writer.flush();
         assertThat(sent(TriggerType.VISIT)).hasSize(1);
+    }
+
+    @Test
+    void aLinkWhoseNotificationFailsDoesNotPreventOthers() {
+        settings(s -> s.setOnEachVisit(true));
+        Link second = data.link(domain, "second", TARGET);
+        LinkNotificationSettings s2 = new LinkNotificationSettings(links.getReferenceById(second.getId()));
+        s2.setOnEachVisit(true);
+        s2.getChannels().add(hook);
+        settingsRepo.saveAndFlush(s2);
+        Visit first = visit(VisitOutcome.REDIRECTED, null, Instant.now());
+        Visit other = visits.saveAndFlush(new Visit(links.getReferenceById(second.getId()), admin, Instant.now(),
+                VisitOutcome.REDIRECTED, null, "GET", false, "203.0.113.9", "ua", null, null, null, null, null, null));
+        UUID failing = link.getId();
+        org.mockito.Mockito.doThrow(new IllegalStateException("boom")).when(deliveryService)
+                .enqueue(org.mockito.ArgumentMatchers.argThat(l -> l != null && l.getId().equals(failing)),
+                        org.mockito.ArgumentMatchers.eq(TriggerType.VISIT), org.mockito.ArgumentMatchers.any(),
+                        org.mockito.ArgumentMatchers.any());
+
+        triggers.onVisits(List.of(first, other));
+
+        assertThat(sent(TriggerType.VISIT)).singleElement()
+                .satisfies(d -> assertThat(d.getLinkLabel()).isEqualTo("go.example.com/second"));
     }
 
     @Test

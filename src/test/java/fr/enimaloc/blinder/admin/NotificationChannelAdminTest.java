@@ -121,6 +121,8 @@ class NotificationChannelAdminTest {
                 .andExpect(status().isNotFound());
         mvc.perform(post("/_/notifications/channels/" + theirs.getId() + "/delete").with(asAdmin).with(csrf()))
                 .andExpect(status().isNotFound());
+        mvc.perform(post("/_/notifications/channels/" + theirs.getId() + "/secret").with(asAdmin).with(csrf()))
+                .andExpect(status().isNotFound());
         assertThat(channels.findById(theirs.getId())).isPresent();
     }
 
