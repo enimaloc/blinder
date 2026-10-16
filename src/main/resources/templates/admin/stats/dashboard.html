@@ -29,7 +29,7 @@
 
     <h2>Par issue</h2>
     <ul class="plain">
-        <li th:each="e : ${view.totals.byOutcome()}"><span th:text="${e.key}"></span> : <span th:text="${e.value}"></span></li>
+        <li th:each="e : ${view.totals.byOutcome()}"><span th:text="${e.key.label()}"></span> : <span th:text="${e.value}"></span></li>
         <li th:if="${view.totals.byOutcome().isEmpty()}" class="notice">Aucune visite.</li>
     </ul>
 
@@ -50,7 +50,7 @@
         <tr th:each="v : ${view.recent()}">
             <td th:text="${#temporals.format(v.occurredAt(), 'dd/MM/yyyy HH:mm:ss')}"></td>
             <td th:if="${link == null}" th:text="${v.domain()} + '/' + ${v.slug()}"></td>
-            <td th:text="${v.outcome()}"></td>
+            <td th:text="${v.outcome().label()} + (${v.denyReason() != null} ? ' (' + ${v.denyReason().label()} + ')' : '')"></td>
             <td th:text="${v.ip()}"></td>
             <td th:text="${v.country()}"></td>
             <td th:text="${v.browser()}"></td>

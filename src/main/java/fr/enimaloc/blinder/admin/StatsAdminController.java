@@ -1,5 +1,6 @@
 package fr.enimaloc.blinder.admin;
 
+import fr.enimaloc.blinder.common.BlinderProperties;
 import fr.enimaloc.blinder.link.Link;
 import fr.enimaloc.blinder.link.LinkService;
 import fr.enimaloc.blinder.stats.StatsPeriod;
@@ -35,6 +36,7 @@ public class StatsAdminController {
     private final StatsQuery query;
     private final VisitWriter visitWriter;
     private final Clock clock;
+    private final BlinderProperties blinder;
 
     @GetMapping("/stats")
     public String global(@RequestParam(name = "days", required = false) Integer days, Model model) {
@@ -87,7 +89,7 @@ public class StatsAdminController {
         response.setContentType("text/csv; charset=UTF-8");
         response.setCharacterEncoding("UTF-8");
         response.setHeader("Content-Disposition",
-                "attachment; filename=\"blinder-stats-" + safe + "-" + LocalDate.now(clock) + ".csv\"");
+                "attachment; filename=\"blinder-stats-" + safe + "-" + LocalDate.now(clock.withZone(blinder.admin().timeZone())) + ".csv\"");
         query.exportCsv(owner, linkId, period, response.getWriter());
     }
 }

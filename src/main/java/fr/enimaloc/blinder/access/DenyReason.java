@@ -1,17 +1,23 @@
 package fr.enimaloc.blinder.access;
 
 public enum DenyReason {
-    DISABLED(false),
-    NOT_YET(false),
-    EXPIRED(true),
-    EXHAUSTED(true),
+    DISABLED(false, "Désactivé"),
+    NOT_YET(false, "Pas encore actif"),
+    EXPIRED(true, "Expiré"),
+    EXHAUSTED(true, "Épuisé"),
     /** Protection non satisfaite sans moyen interactif (allowlist IP / appareils seuls). */
-    FORBIDDEN(false);
+    FORBIDDEN(false, "Interdit");
 
     private final boolean gone;
+    private final String label;
 
-    DenyReason(boolean gone) {
+    DenyReason(boolean gone, String label) {
         this.gone = gone;
+        this.label = label;
+    }
+
+    public String label() {
+        return label;
     }
 
     /** {@code true} : le lien a existé et est mort (410) ; {@code false} : on masque son existence (404). */

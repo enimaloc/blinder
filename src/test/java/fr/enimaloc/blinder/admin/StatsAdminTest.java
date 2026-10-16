@@ -66,10 +66,24 @@ class StatsAdminTest {
                 .andExpect(status().isOk())
                 .andExpect(content().string(containsString("go.example.com/abc")))
                 .andExpect(content().string(containsString("/_/vendor/chart.js/")))
-                .andExpect(content().string(containsString("DENIED")));
+                .andExpect(content().string(containsString("Refusée")))
+                .andExpect(content().string(containsString("<strong>2</strong>")))
+                .andExpect(content().string(containsString("<strong>1</strong>")))
+                .andExpect(content().string(containsString("<strong>0 %</strong>")))
+                .andExpect(content().string(containsString("href=\"/_/stats.csv?days=30\"")));
         mvc.perform(get("/_/links/{id}/stats", link.getId()).with(login(admin)))
-                .andExpect(status().isOk());
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("href=\"/_/links/" + link.getId() + "/stats.csv?days=30\"")));
     }
+
+    @Test
+    void retentionNoticeShownOnlyWhenPeriodExceedsRetention() throws Exception {
+        mvc.perform(get("/_/stats").param("days", "365").with(login(admin)))
+                .andExpect(content().string(containsString("conservées moins longtemps")));
+        mvc.perform(get("/_/stats").param("days", "30").with(login(admin)))
+                .andExpect(content().string(org.hamcrest.Matchers.not(containsString("conservées moins longtemps"))));
+    }
+    // Avis « visites perdues » (dropped > 0) : non testé ici, la file ne se sature pas sans thread d'écriture bloqué.
 
     @Test
     void anotherOwnersLinkIs404() throws Exception {
@@ -92,6 +106,9 @@ class StatsAdminTest {
                 "GET", false, "203.0.113.1", "=HYPERLINK(\"http://evil\"),x", "Chrome", "Linux", null, null, "FR", "Paris"));
         data.visit(link, VisitOutcome.DENIED, now.minus(Duration.ofDays(3)), "203.0.113.2");
         data.visit(link, VisitOutcome.DENIED, now.minus(Duration.ofDays(60)), "203.0.113.3");
+        User other = data.admin("other");
+        Link otherLink = data.link(data.domain("other.example.com", other), "zzz", "https://example.com");
+        data.visit(otherLink, VisitOutcome.REDIRECTED, now, "198.51.100.77");
 
         String body = mvc.perform(get("/_/stats.csv").param("days", "7").with(login(admin)))
                 .andExpect(status().isOk())
@@ -103,6 +120,7 @@ class StatsAdminTest {
         assertThat(lines[0]).isEqualTo("date,domaine,slug,issue,raison,methode,bot,ip,pays,ville,navigateur,os,referer,user_agent");
         assertThat(lines).hasSize(3);
         assertThat(body).contains("\"'=HYPERLINK(\"\"http://evil\"\"),x\"");
+        assertThat(body).doesNotContain("198.51.100.77");
         assertThat(lines[2]).contains("go.example.com,abc,REDIRECTED");
     }
 

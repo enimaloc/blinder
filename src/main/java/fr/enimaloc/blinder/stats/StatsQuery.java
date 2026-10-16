@@ -136,23 +136,36 @@ public class StatsQuery {
     public void exportCsv(User owner, UUID linkId, StatsPeriod period, Writer out) {
         ZoneId zone = blinder.admin().timeZone();
         CsvWriter csv = new CsvWriter(out);
+        // Bornes calculées une fois : l'export reste cohérent même s'il dure.
+        Instant to = clock.instant();
+        Instant from = periodStart(period);
         try {
             out.write(HEADER + "\r\n");
-            for (int offset = 0; ; offset += EXPORT_PAGE) {
-                List<Visit> page = visitQuery("select v from Visit v join fetch v.link l join fetch l.domain",
-                        "order by v.occurredAt, v.id", Visit.class, owner, linkId, period)
-                        .setFirstResult(offset).setMaxResults(EXPORT_PAGE).getResultList();
-                for (Visit v : page) {
+            Instant lastAt = null;
+            UUID lastId = null;
+            while (true) {
+                String after = lastAt == null ? ""
+                        : "and (v.occurredAt > :lastAt or (v.occurredAt = :lastAt and v.id > :lastId)) ";
+                TypedQuery<Visit> page = visitQuery("select v from Visit v join fetch v.link l join fetch l.domain",
+                        after + "order by v.occurredAt, v.id", Visit.class, owner, linkId, from, to);
+                if (lastAt != null) {
+                    page.setParameter("lastAt", lastAt).setParameter("lastId", lastId);
+                }
+                List<Visit> rows = page.setMaxResults(EXPORT_PAGE).getResultList();
+                for (Visit v : rows) {
                     csv.row(DateTimeFormatter.ISO_OFFSET_DATE_TIME.format(v.getOccurredAt().atZone(zone)),
                             v.getLink().getDomain().getHost(), v.getLink().getSlug(), v.getOutcome().name(),
                             v.getDenyReason() == null ? null : v.getDenyReason().name(), v.getHttpMethod(),
                             String.valueOf(v.isBot()), v.getIp(), v.getCountry(), v.getCity(), v.getBrowser(),
                             v.getOs(), v.getReferer(), v.getUserAgent());
                 }
-                em.clear();
-                if (page.size() < EXPORT_PAGE) {
+                if (rows.size() < EXPORT_PAGE) {
                     break;
                 }
+                Visit last = rows.getLast();
+                lastAt = last.getOccurredAt();
+                lastId = last.getId();
+                em.clear();
             }
             out.flush();
         } catch (IOException e) {
@@ -170,7 +183,7 @@ public class StatsQuery {
 
     private List<Count> top(String column, String fallback, User owner, UUID linkId, StatsPeriod period) {
         return visitQuery("select " + column + ", count(v) from Visit v",
-                "group by " + column + " order by count(v) desc", owner, linkId, period)
+                "group by " + column + " order by count(v) desc, " + column, owner, linkId, period)
                 .setMaxResults(TOP).getResultList().stream()
                 .map(r -> new Count(r[0] == null ? fallback : r[0].toString(), ((Number) r[1]).longValue())).toList();
     }
@@ -180,16 +193,23 @@ public class StatsQuery {
                 v.getOutcome(), v.getDenyReason(), v.getIp(), v.getCountry(), v.getBrowser(), v.getRefererHost());
     }
 
+    private Instant periodStart(StatsPeriod period) {
+        ZoneId zone = blinder.admin().timeZone();
+        return LocalDate.now(clock.withZone(zone)).minusDays(period.days() - 1L).atStartOfDay(zone).toInstant();
+    }
+
     private TypedQuery<Object[]> visitQuery(String select, String tail, User owner, UUID linkId, StatsPeriod period) {
         return visitQuery(select, tail, Object[].class, owner, linkId, period);
     }
 
-    /** Fragments JPQL constants uniquement ; toutes les valeurs passent par des paramètres. */
     private <T> TypedQuery<T> visitQuery(String select, String tail, Class<T> type, User owner, UUID linkId,
                                          StatsPeriod period) {
-        ZoneId zone = blinder.admin().timeZone();
-        Instant to = clock.instant();
-        Instant from = LocalDate.now(clock.withZone(zone)).minusDays(period.days() - 1L).atStartOfDay(zone).toInstant();
+        return visitQuery(select, tail, type, owner, linkId, periodStart(period), clock.instant());
+    }
+
+    /** Fragments JPQL constants uniquement ; toutes les valeurs passent par des paramètres. */
+    private <T> TypedQuery<T> visitQuery(String select, String tail, Class<T> type, User owner, UUID linkId,
+                                         Instant from, Instant to) {
         String jpql = select + " where v.owner = :owner" + (linkId == null ? "" : " and v.link.id = :linkId")
                 + " and v.occurredAt >= :from and v.occurredAt <= :to " + tail;
         TypedQuery<T> query = em.createQuery(jpql, type)
