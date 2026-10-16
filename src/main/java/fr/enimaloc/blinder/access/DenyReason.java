@@ -4,7 +4,9 @@ public enum DenyReason {
     DISABLED(false),
     NOT_YET(false),
     EXPIRED(true),
-    EXHAUSTED(true);
+    EXHAUSTED(true),
+    /** Protection non satisfaite sans moyen interactif (allowlist IP / appareils seuls). */
+    FORBIDDEN(false);
 
     private final boolean gone;
 
