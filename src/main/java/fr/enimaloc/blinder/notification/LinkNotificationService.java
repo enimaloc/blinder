@@ -35,13 +35,16 @@ public class LinkNotificationService {
         return settings.findWithChannelsByLinkId(linkId);
     }
 
-    /** Réglages (canaux chargés) de chaque lien, en une requête ; un lien sans réglage n'a pas d'entrée. */
+    /**
+     * Réglages (canaux chargés) de chaque lien de {@code owner}, en une requête ; un lien sans réglage, ou d'un autre
+     * propriétaire, n'a pas d'entrée.
+     */
     @Transactional(readOnly = true)
-    public Map<UUID, LinkNotificationSettings> settingsFor(Collection<UUID> linkIds) {
+    public Map<UUID, LinkNotificationSettings> settingsFor(User owner, Collection<UUID> linkIds) {
         if (linkIds.isEmpty()) {
             return Map.of();
         }
-        return settings.findWithChannelsByLinkIdIn(linkIds).stream()
+        return settings.findWithChannelsByOwnerAndLinkIdIn(owner, linkIds).stream()
                 .collect(Collectors.toMap(s -> s.getLink().getId(), Function.identity()));
     }
 

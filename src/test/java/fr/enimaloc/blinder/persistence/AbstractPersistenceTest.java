@@ -773,14 +773,21 @@ abstract class AbstractPersistenceTest {
         settings.setOnExpired(true);
         settings.setChannels(new java.util.HashSet<>(Set.of(hook)));
         settingsRepository.saveAndFlush(settings);
-        List<UUID> ids = List.of(first.getId(), second.getId(), bare.getId());
+        // Lien d'un autre propriétaire glissé dans la liste : ni ses appareils ni ses réglages ne sortent.
+        User stranger = data.admin("stranger");
+        Link foreign = data.link(data.domain("foreign.example.com", stranger), "autre", "https://example.com/x");
+        data.allowDevice(foreign, data.device(stranger, "foreign"));
+        LinkNotificationSettings foreignSettings = new LinkNotificationSettings(links.getReferenceById(foreign.getId()));
+        foreignSettings.setOnExpired(true);
+        settingsRepository.saveAndFlush(foreignSettings);
+        List<UUID> ids = List.of(first.getId(), second.getId(), bare.getId(), foreign.getId());
 
-        var devicesByLink = linkService.deviceIds(ids);
+        var devicesByLink = linkService.deviceIds(owner, ids);
         assertThat(devicesByLink.get(first.getId())).containsExactlyInAnyOrder(phone.getId(), laptop.getId());
         assertThat(devicesByLink.get(second.getId())).containsExactly(laptop.getId());
-        assertThat(devicesByLink).doesNotContainKey(bare.getId());
+        assertThat(devicesByLink).doesNotContainKeys(bare.getId(), foreign.getId());
 
-        var settingsByLink = linkNotifications.settingsFor(ids);
+        var settingsByLink = linkNotifications.settingsFor(owner, ids);
         assertThat(settingsByLink).containsOnlyKeys(second.getId());
         assertThat(settingsByLink.get(second.getId()).isOnExpired()).isTrue();
         assertThat(settingsByLink.get(second.getId()).getChannels()).extracting(NotificationChannel::getId)

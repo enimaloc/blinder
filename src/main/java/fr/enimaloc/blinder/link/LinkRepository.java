@@ -78,7 +78,8 @@ public interface LinkRepository extends JpaRepository<Link, UUID>, JpaSpecificat
     @Query("select d.id from Link l join l.devices d where l.id = :linkId")
     List<UUID> findDeviceIds(@Param("linkId") UUID linkId);
 
-    /** Paires {@code (lien, appareil)} des liens donnés, en une requête. */
-    @Query("select l.id, d.id from Link l join l.devices d where l.id in :linkIds")
-    List<Object[]> findDeviceIdPairs(@Param("linkIds") Collection<UUID> linkIds);
+    /** Paires {@code (lien, appareil)} des liens donnés appartenant à {@code owner}, en une requête. */
+    @Query("select l.id, d.id from Link l join l.devices d where l.id in :linkIds and l.owner = :owner"
+            + " and d.owner = :owner")
+    List<Object[]> findDeviceIdPairs(@Param("owner") User owner, @Param("linkIds") Collection<UUID> linkIds);
 }

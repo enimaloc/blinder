@@ -1,5 +1,6 @@
 package fr.enimaloc.blinder.notification;
 
+import fr.enimaloc.blinder.user.User;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -17,8 +18,10 @@ public interface LinkNotificationSettingsRepository extends JpaRepository<LinkNo
     @Query("select s from LinkNotificationSettings s left join fetch s.channels where s.link.id = :linkId")
     Optional<LinkNotificationSettings> findWithChannelsByLinkId(@Param("linkId") UUID linkId);
 
-    @Query("select distinct s from LinkNotificationSettings s left join fetch s.channels where s.link.id in :linkIds")
-    List<LinkNotificationSettings> findWithChannelsByLinkIdIn(@Param("linkIds") Collection<UUID> linkIds);
+    @Query("select distinct s from LinkNotificationSettings s left join fetch s.channels"
+            + " where s.link.id in :linkIds and s.link.owner = :owner")
+    List<LinkNotificationSettings> findWithChannelsByOwnerAndLinkIdIn(@Param("owner") User owner,
+                                                                      @Param("linkIds") Collection<UUID> linkIds);
 
     /** Liens dont l'expiration doit être notifiée et ne l'a pas déjà été. */
     @Query("select s from LinkNotificationSettings s join fetch s.link where s.onExpired = true "

@@ -71,9 +71,10 @@ public class LinkApiController {
         if (size < 1) {
             throw new FieldErrorException("size", "Doit être au moins 1");
         }
-        var result = links.search(currentUser.require(), domainId, tagId, q,
-                PageRequest.of(page, Math.min(size, MAX_SIZE)));
-        return PageResource.of(result, content -> mapper.toResources(content, link -> PublicLinkUrls.of(request, link)));
+        User owner = currentUser.require();
+        var result = links.search(owner, domainId, tagId, q, PageRequest.of(page, Math.min(size, MAX_SIZE)));
+        return PageResource.of(result,
+                content -> mapper.toResources(owner, content, link -> PublicLinkUrls.of(request, link)));
     }
 
     @GetMapping("/{id}")

@@ -142,13 +142,16 @@ public class LinkService {
         return links.findDeviceIds(linkId);
     }
 
-    /** Appareils autorisés de chaque lien, en une requête ; un lien sans appareil n'a pas d'entrée. */
+    /**
+     * Appareils autorisés de chaque lien de {@code owner}, en une requête ; un lien sans appareil, ou d'un autre
+     * propriétaire, n'a pas d'entrée.
+     */
     @Transactional(readOnly = true)
-    public Map<UUID, List<UUID>> deviceIds(Collection<UUID> linkIds) {
+    public Map<UUID, List<UUID>> deviceIds(User owner, Collection<UUID> linkIds) {
         if (linkIds.isEmpty()) {
             return Map.of();
         }
-        return links.findDeviceIdPairs(linkIds).stream().collect(Collectors.groupingBy(
+        return links.findDeviceIdPairs(owner, linkIds).stream().collect(Collectors.groupingBy(
                 row -> (UUID) row[0], Collectors.mapping(row -> (UUID) row[1], Collectors.toList())));
     }
 

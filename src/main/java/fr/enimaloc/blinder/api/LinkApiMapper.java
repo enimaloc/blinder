@@ -10,6 +10,7 @@ import fr.enimaloc.blinder.notification.LinkNotificationService;
 import fr.enimaloc.blinder.notification.LinkNotificationSettings;
 import fr.enimaloc.blinder.notification.NotificationChannel;
 import fr.enimaloc.blinder.tag.Tag;
+import fr.enimaloc.blinder.user.User;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Path;
 import jakarta.validation.Validator;
@@ -86,12 +87,13 @@ public class LinkApiMapper {
      * Représentations d'une page de liens : réglages de notification et appareils chargés en une requête chacun,
      * quel que soit le nombre de liens. {@code link.domain} et {@code link.tags} doivent être chargés.
      *
-     * @param url URL publique de chaque lien
+     * @param owner propriétaire des liens (les données d'un autre propriétaire sont ignorées)
+     * @param url   URL publique de chaque lien
      */
-    public List<LinkResource> toResources(List<Link> page, Function<Link, String> url) {
+    public List<LinkResource> toResources(User owner, List<Link> page, Function<Link, String> url) {
         List<UUID> ids = page.stream().map(Link::getId).toList();
-        Map<UUID, LinkNotificationSettings> settings = notifications.settingsFor(ids);
-        Map<UUID, List<UUID>> devices = links.deviceIds(ids);
+        Map<UUID, LinkNotificationSettings> settings = notifications.settingsFor(owner, ids);
+        Map<UUID, List<UUID>> devices = links.deviceIds(owner, ids);
         return page.stream().map(link -> toResource(link, url.apply(link), settings.get(link.getId()),
                 devices.getOrDefault(link.getId(), List.of()))).toList();
     }
