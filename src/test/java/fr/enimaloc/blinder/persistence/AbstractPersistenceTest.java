@@ -821,7 +821,8 @@ abstract class AbstractPersistenceTest {
         NotificationChannel hook = data.channel(owner, "hook", ChannelType.WEBHOOK, "https://hooks.example/a");
         LinkNotificationSettings settings = new LinkNotificationSettings(links.getReferenceById(second.getId()));
         settings.setOnExpired(true);
-        settings.setChannels(new HashSet<>(Set.of(hook)));
+        NotificationChannel backup = data.channel(owner, "backup", ChannelType.WEBHOOK, "https://hooks.example/b");
+        settings.setChannels(new HashSet<>(Set.of(hook, backup)));
         settingsRepository.saveAndFlush(settings);
         // Lien d'un autre propriétaire glissé dans la liste : ni ses appareils ni ses réglages ne sortent.
         User stranger = data.admin("stranger");
@@ -841,7 +842,9 @@ abstract class AbstractPersistenceTest {
         assertThat(settingsByLink).containsOnlyKeys(second.getId());
         assertThat(settingsByLink.get(second.getId()).isOnExpired()).isTrue();
         assertThat(settingsByLink.get(second.getId()).getChannels()).extracting(NotificationChannel::getId)
-                .containsExactly(hook.getId());
+                .containsExactlyInAnyOrder(hook.getId(), backup.getId());
+        // Deux canaux = deux lignes de jointure : sans distinct, Hibernate doit toujours rendre un seul réglage.
+        assertThat(settingsRepository.findWithChannelsByOwnerAndLinkIdIn(owner, ids)).hasSize(1);
     }
 
     @Test

@@ -18,7 +18,7 @@ public interface LinkNotificationSettingsRepository extends JpaRepository<LinkNo
     @Query("select s from LinkNotificationSettings s left join fetch s.channels where s.link.id = :linkId")
     Optional<LinkNotificationSettings> findWithChannelsByLinkId(@Param("linkId") UUID linkId);
 
-    @Query("select distinct s from LinkNotificationSettings s left join fetch s.channels"
+    @Query("select s from LinkNotificationSettings s left join fetch s.channels"
             + " where s.link.id in :linkIds and s.link.owner = :owner")
     List<LinkNotificationSettings> findWithChannelsByOwnerAndLinkIdIn(@Param("owner") User owner,
                                                                       @Param("linkIds") Collection<UUID> linkIds);
