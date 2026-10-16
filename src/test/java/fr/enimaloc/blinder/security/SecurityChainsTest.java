@@ -39,4 +39,14 @@ class SecurityChainsTest {
         assertThat(result.getResponse().getStatus()).isNotEqualTo(302);
         assertThat(result.getRequest().getSession(false)).isNull();
     }
+
+    @Test
+    void encodedUnderscorePrefixCannotBypassAdminChain() throws Exception {
+        mvc.perform(get(java.net.URI.create("http://go.example.com/%5F/")))
+                .andExpect(status().isFound())
+                .andExpect(redirectedUrlPattern("/**/_/login"));
+        mvc.perform(get(java.net.URI.create("http://go.example.com/%5f/links/1")))
+                .andExpect(status().isFound())
+                .andExpect(redirectedUrlPattern("/**/_/login"));
+    }
 }

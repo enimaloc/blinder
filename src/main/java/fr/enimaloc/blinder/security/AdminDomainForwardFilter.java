@@ -12,7 +12,7 @@ import java.io.IOException;
 
 /**
  * Sur le domaine admin dédié, préfixe les chemins par {@code /_} : un seul jeu de routes admin.
- * S'exécute avant la chaîne Spring Security (ordre -100), qui s'applique ensuite au FORWARD.
+ * S'exécute avant la chaîne Spring Security (ordre -110, avant FilterChainProxy à -100), qui s'applique ensuite au FORWARD.
  */
 @Component
 public class AdminDomainForwardFilter extends OncePerRequestFilter implements Ordered {

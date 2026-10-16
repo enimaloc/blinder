@@ -45,4 +45,12 @@ class AdminRequestMatcherTest {
     void blankAdminDomainIsIgnored() {
         assertThat(matcher("  ").isAdminDomain(request("localhost", "/"))).isFalse();
     }
+
+    @Test
+    void encodedUnderscoreIsRecognisedAsPrefix() {
+        AdminRequestMatcher m = matcher(null);
+        assertThat(m.matches(request("go.example.com", "/%5F/"))).isTrue();
+        assertThat(m.matches(request("go.example.com", "/%5f/links/1"))).isTrue();
+        assertThat(m.matches(request("go.example.com", "/%5Fpromo"))).isFalse();
+    }
 }

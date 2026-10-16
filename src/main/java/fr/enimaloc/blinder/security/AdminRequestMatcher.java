@@ -5,6 +5,7 @@ import fr.enimaloc.blinder.common.HostNormalizer;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.security.web.util.matcher.RequestMatcher;
 import org.springframework.stereotype.Component;
+import org.springframework.web.util.UrlPathHelper;
 
 @Component
 public class AdminRequestMatcher implements RequestMatcher {
@@ -27,9 +28,11 @@ public class AdminRequestMatcher implements RequestMatcher {
         return isAdminDomain(request) || pathOf(request).startsWith(PREFIX);
     }
 
+    /**
+     * Chemin décodé et normalisé (percent-decoding, paramètres ;x retirés), comme le fait Spring MVC :
+     * sinon {@code /%5F/} contournerait la chaîne admin tout en atteignant les handlers {@code /_/}.
+     */
     static String pathOf(HttpServletRequest request) {
-        String uri = request.getRequestURI();
-        String context = request.getContextPath();
-        return context != null && !context.isEmpty() && uri.startsWith(context) ? uri.substring(context.length()) : uri;
+        return UrlPathHelper.defaultInstance.getPathWithinApplication(request);
     }
 }
