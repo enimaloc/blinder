@@ -73,6 +73,13 @@ class PreviewFetcherTest {
         server.start();
     }
 
+    @Test
+    void fetchAfterCloseReturnsEmptyWithoutThrowing() {
+        PreviewFetcher closed = new PreviewFetcher(address -> true);
+        closed.close();
+        assertThat(closed.fetch(base + "/page")).isEmpty();
+    }
+
     @AfterEach
     void stop() {
         permissive.close();

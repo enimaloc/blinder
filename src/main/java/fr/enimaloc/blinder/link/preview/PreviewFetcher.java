@@ -120,7 +120,7 @@ public class PreviewFetcher implements AutoCloseable {
                 return Optional.ofNullable(step.data());
             }
             return Optional.empty();
-        } catch (IOException | URISyntaxException | IllegalArgumentException e) {
+        } catch (IOException | URISyntaxException | RuntimeException e) {
             return Optional.empty();
         }
     }

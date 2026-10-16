@@ -91,12 +91,20 @@
             <label for="metaImageUrl">Image (URL, personnalisée)</label>
             <input id="metaImageUrl" type="url" th:field="*{metaImageUrl}">
             <p class="error" th:errors="*{metaImageUrl}"></p>
+            <p class="notice" th:if="${preview != null}">
+                Dernier aperçu repris :
+                <strong th:text="${preview.status.name() == 'OK'} ? 'réussi' : 'échec'">réussi</strong>
+                — <span th:text="${preview.title} ?: '(sans titre)'"></span>
+            </p>
         </fieldset>
         <p><button type="submit">Enregistrer</button></p>
     </form>
     <th:block th:if="${linkId != null}">
         <form class="inline" th:action="@{/_/links/{id}/reset(id=${linkId})}" method="post">
             <button type="submit">Réinitialiser le compteur</button>
+        </form>
+        <form class="inline" th:if="${form.metaMode != null and form.metaMode.name() == 'PASSTHROUGH'}" th:action="@{/_/links/{id}/preview/refresh(id=${linkId})}" method="post">
+            <button type="submit">Rafraîchir l'aperçu</button>
         </form>
         <form class="inline" th:action="@{/_/links/{id}/delete(id=${linkId})}" method="post">
             <button class="danger" type="submit">Supprimer</button>
