@@ -77,6 +77,34 @@ class QrAdminTest {
     }
 
     @Test
+    void pngWithoutSizeDefaultsTo512() throws Exception {
+        byte[] body = mvc.perform(get("/_/links/{id}/qr.png", link.getId()).with(asAdmin))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsByteArray();
+        assertThat(ImageIO.read(new ByteArrayInputStream(body)).getWidth()).isEqualTo(512);
+        Mockito.verify(qr).png("http://go.example.com/promo", 512);
+    }
+
+    @Test
+    void pngMinimumSizeIs128Exactly() throws Exception {
+        byte[] body = mvc.perform(get("/_/links/{id}/qr.png", link.getId()).param("size", "128").with(asAdmin))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsByteArray();
+        assertThat(ImageIO.read(new ByteArrayInputStream(body)).getWidth()).isEqualTo(128);
+    }
+
+    @Test
+    void nonStandardPortAndSchemeAppearInTheEncodedUrl() throws Exception {
+        mvc.perform(get("/_/links/{id}/qr.svg", link.getId()).with(asAdmin).with(request -> {
+                    request.setScheme("https");
+                    request.setServerPort(8443);
+                    return request;
+                }))
+                .andExpect(status().isOk());
+        Mockito.verify(qr).svg("https://go.example.com:8443/promo");
+    }
+
+    @Test
     void pngDefaultsAndClamps() throws Exception {
         mvc.perform(get("/_/links/{id}/qr.png", link.getId()).param("size", "9999").with(asAdmin))
                 .andExpect(status().isOk());

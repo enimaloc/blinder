@@ -610,6 +610,7 @@ class LinkApiTest {
                 .andExpect(status().isOk())
                 .andExpect(content().contentType(MediaType.IMAGE_PNG))
                 .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-store"))
+                .andExpect(header().doesNotExist(HttpHeaders.CONTENT_DISPOSITION))
                 .andReturn().getResponse().getContentAsByteArray();
         BufferedImage image = ImageIO.read(new ByteArrayInputStream(png));
         assertThat(image.getWidth()).isEqualTo(200);
