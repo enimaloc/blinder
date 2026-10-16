@@ -346,6 +346,52 @@ class LinkApiTest {
     }
 
     @Test
+    void patchRejectsUnknownFields() throws Exception {
+        String id = createAndGetId("""
+                {"domainId":"%s","targetUrl":"https://example.org/k"}
+                """.formatted(domain.getId()));
+        mvc.perform(jsonBody(patch(BASE + "/" + id), "{\"enable\": false}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.errors.enable").value("Champ inconnu"));
+        mvc.perform(jsonBody(patch(BASE + "/" + id), "{\"notifications\":{\"exhuasted\":true}}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors['notifications.exhuasted']").value("Champ inconnu"));
+        mvc.perform(auth(get(BASE + "/" + id)))
+                .andExpect(jsonPath("$.enabled").value(true));
+    }
+
+    @Test
+    void postAndPutRejectUnknownFields() throws Exception {
+        mvc.perform(jsonBody(post(BASE), """
+                        {"domainId":"%s","targetUrl":"https://example.org/k","expiresat":"2030-01-01T00:00:00Z"}
+                        """.formatted(domain.getId())))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors.expiresat").value("Champ inconnu"));
+        String id = createAndGetId("""
+                {"domainId":"%s","targetUrl":"https://example.org/k"}
+                """.formatted(domain.getId()));
+        mvc.perform(jsonBody(put(BASE + "/" + id), """
+                        {"domainId":"%s","targetUrl":"https://example.org/k","maxuses":3}
+                        """.formatted(domain.getId())))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors.maxuses").value("Champ inconnu"));
+    }
+
+    @Test
+    void putAcceptsTheRepresentationReturnedByGet() throws Exception {
+        String id = createAndGetId("""
+                {"domainId":"%s","targetUrl":"https://example.org/k","tags":["x"],"maxUses":4}
+                """.formatted(domain.getId()));
+        String representation = mvc.perform(auth(get(BASE + "/" + id)))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        mvc.perform(jsonBody(put(BASE + "/" + id), representation))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.maxUses").value(4))
+                .andExpect(jsonPath("$.tags[0]").value("x"));
+    }
+
+    @Test
     void putReplacesAndChecksVersion() throws Exception {
         MvcResult created = mvc.perform(jsonBody(post(BASE), """
                         {"domainId":"%s","slug":"put","targetUrl":"https://example.org/1","tags":["x"],"maxUses":4}

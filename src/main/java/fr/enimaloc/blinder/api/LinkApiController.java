@@ -84,6 +84,7 @@ public class LinkApiController {
     @PostMapping
     public ResponseEntity<LinkResource> create(@RequestBody LinkInput input, HttpServletRequest request) {
         User owner = currentUser.require();
+        rejectUnknown(input);
         LinkForm form = mapper.toForm(input, new LinkForm());
         Link created = apiFields(() -> edits.create(owner, form));
         edits.refreshPreviewAfterSave(owner, created, null);
@@ -148,10 +149,18 @@ public class LinkApiController {
     private LinkResource save(User owner, Link current, LinkInput input, HttpServletRequest request) {
         // `current` vient d'un chargement distinct de celui de update() (open-in-view désactivé)
         String previousTarget = current.getTargetUrl();
+        rejectUnknown(input);
         LinkForm form = mapper.toForm(input, new LinkForm());
         Link updated = apiFields(() -> edits.update(owner, current.getId(), form));
         edits.refreshPreviewAfterSave(owner, updated, previousTarget);
         return resource(links.get(owner, current.getId()), request);
+    }
+
+    private static void rejectUnknown(LinkInput input) {
+        Map<String, String> unknown = input.unknownFieldErrors();
+        if (!unknown.isEmpty()) {
+            throw new InvalidFieldsException(unknown);
+        }
     }
 
     private LinkResource resource(Link link, HttpServletRequest request) {
