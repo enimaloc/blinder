@@ -16,6 +16,9 @@ public interface LinkNotificationSettingsRepository extends JpaRepository<LinkNo
     @Query("select s from LinkNotificationSettings s left join fetch s.channels where s.link.id = :linkId")
     Optional<LinkNotificationSettings> findWithChannelsByLinkId(@Param("linkId") UUID linkId);
 
-    @Query("select s from LinkNotificationSettings s join fetch s.link where s.onExpired = true")
+    /** Liens dont l'expiration doit être notifiée et ne l'a pas déjà été. */
+    @Query("select s from LinkNotificationSettings s join fetch s.link where s.onExpired = true "
+            + "and not exists (select 1 from FiredTrigger f where f.link = s.link "
+            + "and f.triggerType = fr.enimaloc.blinder.notification.TriggerType.EXPIRED)")
     List<LinkNotificationSettings> findByOnExpiredTrue();
 }

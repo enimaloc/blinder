@@ -32,6 +32,8 @@ class ExpiryScannerTest {
     LinkNotificationSettingsRepository settingsRepo;
     @Autowired
     NotificationDeliveryRepository deliveries;
+    @Autowired
+    FiredTriggerRepository firedRepo;
 
     User admin;
     Domain domain;
@@ -91,5 +93,28 @@ class ExpiryScannerTest {
         link("quiet", false, l -> l.setExpiresAt(NOW.minusSeconds(5)));
         scanner.scan(NOW);
         assertThat(deliveries.count()).isZero();
+    }
+
+    @Test
+    void linkExtendedAfterListingIsNotNotified() {
+        Link stale = link("extended", true, l -> l.setExpiresAt(NOW.minusSeconds(5)));
+        // le lien a été listé comme expiré puis prolongé avant la transaction de notification
+        Link current = links.findById(stale.getId()).orElseThrow();
+        current.setExpiresAt(NOW.plusSeconds(3600));
+        links.saveAndFlush(current);
+
+        scanner.scanLink(stale.getId(), NOW);
+
+        assertThat(deliveries.count()).isZero();
+        assertThat(firedRepo.findByLinkIdAndTriggerType(stale.getId(), TriggerType.EXPIRED)).isEmpty();
+    }
+
+    @Test
+    void alreadyFiredLinksAreNoLongerListed() {
+        link("old", true, l -> l.setExpiresAt(NOW.minusSeconds(5)));
+        assertThat(settingsRepo.findByOnExpiredTrue()).hasSize(1);
+        scanner.scan(NOW);
+        assertThat(deliveries.count()).isEqualTo(1);
+        assertThat(settingsRepo.findByOnExpiredTrue()).isEmpty();
     }
 }

@@ -36,13 +36,19 @@ public class ExpiryScanner {
                 continue;
             }
             try {
-                transactions.executeWithoutResult(status -> links.findById(linkId)
-                        .ifPresent(link -> deliveries.fireOnce(link, TriggerType.EXPIRED, null, now,
-                                NotificationPayloads.Details.NONE)));
+                scanLink(linkId, now);
             } catch (RuntimeException e) {
                 log.error("Notification d'expiration du lien {} en échec", linkId, e);
             }
         }
+    }
+
+    /** Recharge le lien dans la transaction : il a pu être prolongé ou supprimé depuis la liste. */
+    void scanLink(UUID linkId, Instant now) {
+        transactions.executeWithoutResult(status -> links.findById(linkId)
+                .filter(link -> isExpired(link, now))
+                .ifPresent(link -> deliveries.fireOnce(link, TriggerType.EXPIRED, null, now,
+                        NotificationPayloads.Details.NONE)));
     }
 
     private static boolean isExpired(Link link, Instant now) {
