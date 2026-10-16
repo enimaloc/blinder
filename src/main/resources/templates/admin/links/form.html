@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="fr" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{admin/fragments :: head(${linkId == null} ? 'Nouveau lien' : 'Modifier le lien')}"></head>
+<body>
+<nav th:replace="~{admin/fragments :: nav}"></nav>
+<main>
+    <h1 th:text="${linkId == null} ? 'Nouveau lien' : ${publicUrl}"></h1>
+    <p th:if="${status != null}"><span th:class="'badge badge-' + ${#strings.toLowerCase(status.name())}"
+                                       th:text="${status.label()}"></span>
+        <span th:text="'Utilisations : ' + ${useCount}"></span></p>
+    <p class="error" th:if="${staleError}">Ce lien a été modifié entre-temps, rechargez la page.</p>
+    <form th:object="${form}" method="post"
+          th:action="${linkId == null} ? @{/_/links} : @{/_/links/{id}(id=${linkId})}">
+        <input type="hidden" th:field="*{version}">
+        <label for="domainId">Domaine</label>
+        <select id="domainId" th:field="*{domainId}">
+            <option th:each="d : ${domains}" th:value="${d.id}" th:text="${d.host}"></option>
+        </select>
+        <p class="error" th:errors="*{domainId}"></p>
+        <label for="slug">Slug (vide = généré)</label>
+        <input id="slug" th:field="*{slug}">
+        <p class="error" th:errors="*{slug}"></p>
+        <label for="targetUrl">URL cible</label>
+        <input id="targetUrl" type="url" th:field="*{targetUrl}" required>
+        <p class="error" th:errors="*{targetUrl}"></p>
+        <label><input type="checkbox" th:field="*{enabled}"> Actif</label>
+        <label for="notBefore">Activation (optionnel)</label>
+        <input id="notBefore" type="datetime-local" th:field="*{notBefore}">
+        <p class="error" th:errors="*{notBefore}"></p>
+        <label for="expiresAt">Expiration (optionnel)</label>
+        <input id="expiresAt" type="datetime-local" th:field="*{expiresAt}">
+        <p class="error" th:errors="*{expiresAt}"></p>
+        <label for="ttlMinutes">Durée de validité après la 1re utilisation, en minutes (optionnel)</label>
+        <input id="ttlMinutes" type="number" min="1" th:field="*{ttlMinutes}">
+        <p class="error" th:errors="*{ttlMinutes}"></p>
+        <label for="maxUses">Utilisations max (optionnel)</label>
+        <input id="maxUses" type="number" min="1" th:field="*{maxUses}">
+        <p class="error" th:errors="*{maxUses}"></p>
+        <label for="deniedUrl">URL en cas de refus (optionnel)</label>
+        <input id="deniedUrl" type="url" th:field="*{deniedUrl}">
+        <p class="error" th:errors="*{deniedUrl}"></p>
+        <p><button type="submit">Enregistrer</button></p>
+    </form>
+    <th:block th:if="${linkId != null}">
+        <form class="inline" th:action="@{/_/links/{id}/reset(id=${linkId})}" method="post">
+            <button type="submit">Réinitialiser le compteur</button>
+        </form>
+        <form class="inline" th:action="@{/_/links/{id}/delete(id=${linkId})}" method="post">
+            <button class="danger" type="submit">Supprimer</button>
+        </form>
+    </th:block>
+</main>
+</body>
+</html>
