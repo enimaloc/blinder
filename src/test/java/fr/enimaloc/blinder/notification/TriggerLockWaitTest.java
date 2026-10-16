@@ -23,6 +23,7 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -64,7 +65,7 @@ class TriggerLockWaitTest {
         hook = data.channel(admin, "hook", ChannelType.WEBHOOK, "https://example.com/h");
     }
 
-    Link link(java.util.function.Consumer<Link> config, java.util.function.Consumer<LinkNotificationSettings> cfg) {
+    Link link(Consumer<Link> config, Consumer<LinkNotificationSettings> cfg) {
         Link l = new Link(domain, "l", "https://example.com/t", admin);
         config.accept(l);
         l = data.save(l);

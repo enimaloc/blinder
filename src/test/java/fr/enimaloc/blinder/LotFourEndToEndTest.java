@@ -26,6 +26,8 @@ import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
@@ -139,8 +141,8 @@ class LotFourEndToEndTest {
 
     /** Calcul indépendant de la signature (pas {@code WebhookSignatures}) : {@code sha256=} + HMAC-SHA256 hex. */
     private static String hmac(String secret, String message) throws Exception {
-        javax.crypto.Mac mac = javax.crypto.Mac.getInstance("HmacSHA256");
-        mac.init(new javax.crypto.spec.SecretKeySpec(secret.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
+        Mac mac = Mac.getInstance("HmacSHA256");
+        mac.init(new SecretKeySpec(secret.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
         StringBuilder hex = new StringBuilder("sha256=");
         for (byte b : mac.doFinal(message.getBytes(StandardCharsets.UTF_8))) {
             hex.append(String.format("%02x", b));

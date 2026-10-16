@@ -19,6 +19,7 @@ import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
 import javax.imageio.ImageIO;
 import java.io.ByteArrayInputStream;
+import org.hamcrest.Matchers;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
@@ -133,6 +134,6 @@ class QrAdminTest {
                 .andExpect(content().string(containsString("/_/links/" + link.getId() + "/qr.svg")))
                 .andExpect(content().string(containsString("/_/links/" + link.getId() + "/qr.png?download")));
         mvc.perform(get("/_/links/new").with(asAdmin))
-                .andExpect(content().string(org.hamcrest.Matchers.not(containsString("qr.svg"))));
+                .andExpect(content().string(Matchers.not(containsString("qr.svg"))));
     }
 }

@@ -22,6 +22,9 @@ import org.springframework.test.web.servlet.request.RequestPostProcessor;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.UUID;
+import fr.enimaloc.blinder.stats.VisitWriter;
+import org.hamcrest.Matchers;
+import org.mockito.Mockito;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
@@ -45,7 +48,7 @@ class StatsAdminTest {
     @Autowired
     LinkRepository links;
     @MockitoSpyBean
-    fr.enimaloc.blinder.stats.VisitWriter visitWriter;
+    VisitWriter visitWriter;
 
     User admin;
     Link link;
@@ -86,14 +89,14 @@ class StatsAdminTest {
         mvc.perform(get("/_/stats").param("days", "365").with(login(admin)))
                 .andExpect(content().string(containsString("conservées moins longtemps")));
         mvc.perform(get("/_/stats").param("days", "30").with(login(admin)))
-                .andExpect(content().string(org.hamcrest.Matchers.not(containsString("conservées moins longtemps"))));
+                .andExpect(content().string(Matchers.not(containsString("conservées moins longtemps"))));
     }
 
     @Test
     void droppedVisitsNoticeShownOnlyWhenSomeWereDropped() throws Exception {
         mvc.perform(get("/_/stats").with(login(admin)))
-                .andExpect(content().string(org.hamcrest.Matchers.not(containsString("visite(s) perdue(s)"))));
-        org.mockito.Mockito.doReturn(3L).when(visitWriter).dropped();
+                .andExpect(content().string(Matchers.not(containsString("visite(s) perdue(s)"))));
+        Mockito.doReturn(3L).when(visitWriter).dropped();
         mvc.perform(get("/_/stats").with(login(admin)))
                 .andExpect(content().string(containsString("3 visite(s) perdue(s)")));
     }
@@ -156,7 +159,7 @@ class StatsAdminTest {
         mvc.perform(get("/_/stats").param("tag", promo.getId().toString()).with(login(admin)))
                 .andExpect(status().isOk())
                 .andExpect(content().string(containsString("go.example.com/tgd")))
-                .andExpect(content().string(org.hamcrest.Matchers.not(containsString("go.example.com/abc"))))
+                .andExpect(content().string(Matchers.not(containsString("go.example.com/abc"))))
                 .andExpect(content().string(containsString("tag=" + promo.getId())));
         String body = mvc.perform(get("/_/stats.csv").param("tag", promo.getId().toString()).with(login(admin)))
                 .andExpect(status().isOk())

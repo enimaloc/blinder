@@ -13,6 +13,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.Optional;
+import fr.enimaloc.blinder.link.LinkRepository;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -28,7 +29,7 @@ class LinkPreviewServiceTest {
     @Autowired
     LinkPreviewRepository previews;
     @Autowired
-    fr.enimaloc.blinder.link.LinkRepository links;
+    LinkRepository links;
     @Autowired
     TestData data;
     @MockitoBean

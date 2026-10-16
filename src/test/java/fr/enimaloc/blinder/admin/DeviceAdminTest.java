@@ -18,6 +18,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
@@ -153,7 +154,7 @@ class DeviceAdminTest {
     @Test
     void renameDoesNotResetTicketSetAtomically() throws Exception {
         Device laptop = data.device(admin, "Laptop");
-        Instant expires = Instant.now().plusSeconds(600).truncatedTo(java.time.temporal.ChronoUnit.MILLIS);
+        Instant expires = Instant.now().plusSeconds(600).truncatedTo(ChronoUnit.MILLIS);
         devices.setTicket(laptop.getId(), "ticket-hash", expires);
 
         mvc.perform(post("/_/devices/{id}/rename", laptop.getId()).with(asAdmin).with(csrf()).param("name", "Work"))

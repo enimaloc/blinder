@@ -19,12 +19,14 @@ import java.time.Instant;
 import java.util.HexFormat;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
+import com.sun.net.httpserver.Headers;
+import org.assertj.core.data.Offset;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 class WebhookSenderTest {
 
-    record Received(String method, String body, com.sun.net.httpserver.Headers headers) {
+    record Received(String method, String body, Headers headers) {
     }
 
     HttpServer server;
@@ -125,7 +127,7 @@ class WebhookSenderTest {
         assertThat(r.headers().getFirst("X-Blinder-Event")).isEqualTo("TEST");
         assertThat(r.headers().getFirst("X-Blinder-Delivery")).isEqualTo(delivery.getId().toString());
         String timestamp = r.headers().getFirst("X-Blinder-Timestamp");
-        assertThat(Long.parseLong(timestamp)).isCloseTo(Instant.now().getEpochSecond(), org.assertj.core.data.Offset.offset(10L));
+        assertThat(Long.parseLong(timestamp)).isCloseTo(Instant.now().getEpochSecond(), Offset.offset(10L));
         assertThat(r.headers().getFirst("X-Blinder-Signature")).isEqualTo(hmac("topsecret", timestamp + "." + r.body()));
     }
 

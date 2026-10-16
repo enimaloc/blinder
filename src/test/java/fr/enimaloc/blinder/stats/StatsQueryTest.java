@@ -21,6 +21,9 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
+import fr.enimaloc.blinder.tag.Tag;
+import java.io.StringWriter;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -136,7 +139,7 @@ class StatsQueryTest {
     @Test
     void tagScopeAggregatesOnlyTaggedLinks() {
         Link tagged = data.link(link.getDomain(), "tgd", "https://example.com");
-        fr.enimaloc.blinder.tag.Tag promo = data.tag(admin, "promo");
+        Tag promo = data.tag(admin, "promo");
         data.tagLink(tagged, promo);
         Instant now = clock.instant().minusSeconds(60);
         data.visit(link, VisitOutcome.REDIRECTED, now, "203.0.113.1");
@@ -156,17 +159,17 @@ class StatsQueryTest {
         assertThat(query.topLinks(admin, scope, StatsPeriod.D30)).extracting(StatsQuery.Count::label)
                 .containsExactly("go.example.com/tgd");
         assertThat(query.recent(admin, scope, StatsPeriod.D30, 50)).hasSize(2);
-        java.io.StringWriter csv = new java.io.StringWriter();
+        StringWriter csv = new StringWriter();
         query.exportCsv(admin, scope, StatsPeriod.D30, csv);
         assertThat(csv.toString().split("\r\n")).hasSize(3);
-        assertThat(query.totals(admin, StatsScope.tag(java.util.UUID.randomUUID()), StatsPeriod.D30).total()).isZero();
+        assertThat(query.totals(admin, StatsScope.tag(UUID.randomUUID()), StatsPeriod.D30).total()).isZero();
     }
 
     @Test
     void tagScopeIgnoresLinksOfAnotherOwner() {
-        fr.enimaloc.blinder.user.User other = data.admin("other");
+        User other = data.admin("other");
         Link foreign = data.link(data.domain("other.example.com", other), "fg", "https://example.com");
-        fr.enimaloc.blinder.tag.Tag promo = data.tag(admin, "promo");
+        Tag promo = data.tag(admin, "promo");
         data.tagLink(foreign, promo);
         LocalDate today = LocalDate.now(clock.withZone(blinder.admin().timeZone()));
         // Cumul incohérent (propriétaire du lien différent) : la portée par tag ne doit pas le compter.

@@ -16,6 +16,7 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.UUID;
+import org.hamcrest.Matchers;
 
 import static org.hamcrest.Matchers.endsWith;
 import static org.hamcrest.Matchers.hasSize;
@@ -78,7 +79,7 @@ class TagApiTest {
     void createsWithLocationAndColor() throws Exception {
         mvc.perform(json(post(BASE), "{\"name\":\"  Promo  \",\"color\":\"#AABBCC\"}"))
                 .andExpect(status().isCreated())
-                .andExpect(header().string(HttpHeaders.LOCATION, org.hamcrest.Matchers.containsString(BASE + "/")))
+                .andExpect(header().string(HttpHeaders.LOCATION, Matchers.containsString(BASE + "/")))
                 .andExpect(jsonPath("$.name").value("Promo"))
                 .andExpect(jsonPath("$.color").value("#aabbcc"))
                 .andExpect(jsonPath("$.links").value(0));

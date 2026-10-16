@@ -22,6 +22,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import org.hamcrest.Matchers;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -204,8 +205,8 @@ class RedirectControllerTest {
                         .header("User-Agent", "Mozilla/5.0 (compatible; Discordbot/2.0)"))
                 .andExpect(status().isOk())
                 .andExpect(header().doesNotExist("Location"))
-                .andExpect(content().string(org.hamcrest.Matchers.not(
-                        org.hamcrest.Matchers.containsString("secret-target"))));
+                .andExpect(content().string(Matchers.not(
+                        Matchers.containsString("secret-target"))));
         assertThat(useCount(link)).isZero();
 
         mvc.perform(get("http://go.example.com/once"))

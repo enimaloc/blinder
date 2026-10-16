@@ -6,6 +6,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import java.net.URI;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -42,10 +43,10 @@ class SecurityChainsTest {
 
     @Test
     void encodedUnderscorePrefixCannotBypassAdminChain() throws Exception {
-        mvc.perform(get(java.net.URI.create("http://go.example.com/%5F/")))
+        mvc.perform(get(URI.create("http://go.example.com/%5F/")))
                 .andExpect(status().isFound())
                 .andExpect(redirectedUrlPattern("/**/_/login"));
-        mvc.perform(get(java.net.URI.create("http://go.example.com/%5f/links/1")))
+        mvc.perform(get(URI.create("http://go.example.com/%5f/links/1")))
                 .andExpect(status().isFound())
                 .andExpect(redirectedUrlPattern("/**/_/login"));
     }

@@ -64,6 +64,18 @@ import jakarta.persistence.PersistenceContext;
 
 import java.util.UUID;
 import java.time.temporal.ChronoUnit;
+import fr.enimaloc.blinder.device.DeviceService;
+import fr.enimaloc.blinder.link.LinkEditService;
+import fr.enimaloc.blinder.link.LinkForm;
+import fr.enimaloc.blinder.notification.LinkNotificationService;
+import fr.enimaloc.blinder.stats.StatsPeriod;
+import fr.enimaloc.blinder.stats.StatsQuery;
+import fr.enimaloc.blinder.stats.StatsScope;
+import fr.enimaloc.blinder.tag.TagService;
+import fr.enimaloc.blinder.user.UserRepository;
+import java.util.HashSet;
+import org.assertj.core.groups.Tuple;
+import org.junit.jupiter.api.Assumptions;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -109,11 +121,11 @@ abstract class AbstractPersistenceTest {
     ApiTokenRepository apiTokens;
 
     @Autowired
-    fr.enimaloc.blinder.stats.StatsQuery statsQuery;
+    StatsQuery statsQuery;
     @Autowired
-    fr.enimaloc.blinder.tag.TagService tagService;
+    TagService tagService;
     @Autowired
-    fr.enimaloc.blinder.user.UserRepository users;
+    UserRepository users;
     @PersistenceContext
     EntityManager entityManager;
 
@@ -123,11 +135,11 @@ abstract class AbstractPersistenceTest {
     @Autowired
     LinkService linkService;
     @Autowired
-    fr.enimaloc.blinder.link.LinkEditService linkEdits;
+    LinkEditService linkEdits;
     @Autowired
-    fr.enimaloc.blinder.notification.LinkNotificationService linkNotifications;
+    LinkNotificationService linkNotifications;
     @Autowired
-    fr.enimaloc.blinder.device.DeviceService deviceService;
+    DeviceService deviceService;
 
     User owner;
     Domain domain;
@@ -173,7 +185,7 @@ abstract class AbstractPersistenceTest {
     void notificationOnlyEditBumpsLinkVersion() {
         Link link = data.link(domain, "notif", "https://example.com/n");
         long before = links.findById(link.getId()).orElseThrow().getVersion();
-        fr.enimaloc.blinder.link.LinkForm form = new fr.enimaloc.blinder.link.LinkForm();
+        LinkForm form = new LinkForm();
         form.setDomainId(domain.getId());
         form.setSlug("notif");
         form.setTargetUrl("https://example.com/n");
@@ -286,7 +298,7 @@ abstract class AbstractPersistenceTest {
 
     @Test
     void entityUpdateDoesNotOverwriteConcurrentlyCountedUsage() throws Exception {
-        org.junit.jupiter.api.Assumptions.assumeTrue(supportsOverlappingTransactions());
+        Assumptions.assumeTrue(supportsOverlappingTransactions());
         Link created = new Link(domain, "race", "https://example.com/a", owner);
         created.setMaxUses(1);
         data.save(created);
@@ -414,7 +426,7 @@ abstract class AbstractPersistenceTest {
         Device device = data.device(owner, "Laptop");
         data.credential(device, domain);
         assertThatThrownBy(() -> data.credential(device, domain))
-                .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
+                .isInstanceOf(DataIntegrityViolationException.class);
     }
 
     @Test
@@ -511,7 +523,7 @@ abstract class AbstractPersistenceTest {
         LinkNotificationSettings settings = new LinkNotificationSettings(links.getReferenceById(link.getId()));
         settings.setOnExhausted(true);
         settings.setVisitThreshold(5);
-        settings.setChannels(new java.util.HashSet<>(Set.of(channel)));
+        settings.setChannels(new HashSet<>(Set.of(channel)));
         settingsRepository.saveAndFlush(settings);
 
         FiredTrigger fired = new FiredTrigger(links.getReferenceById(link.getId()), TriggerType.EXHAUSTED);
@@ -579,7 +591,7 @@ abstract class AbstractPersistenceTest {
         settings.setOnExpired(true);
         settings.setOnExhausted(true);
         settings.setVisitThreshold(1);
-        settings.setChannels(new java.util.HashSet<>(Set.of(channel)));
+        settings.setChannels(new HashSet<>(Set.of(channel)));
         settingsRepository.saveAndFlush(settings);
         return link;
     }
@@ -592,7 +604,7 @@ abstract class AbstractPersistenceTest {
         data.visit(link, VisitOutcome.REDIRECTED, Instant.now(), "203.0.113.1");
         dailyStats.saveAndFlush(new VisitDailyStat(ref, owner, LocalDate.of(2026, 10, 16), VisitOutcome.REDIRECTED));
         LinkNotificationSettings settings = new LinkNotificationSettings(ref);
-        settings.setChannels(new java.util.HashSet<>(Set.of(channel)));
+        settings.setChannels(new HashSet<>(Set.of(channel)));
         settingsRepository.saveAndFlush(settings);
         firedTriggers.saveAndFlush(new FiredTrigger(ref, TriggerType.EXPIRED));
         NotificationDelivery delivery = deliveries.saveAndFlush(new NotificationDelivery(owner, channel, link.getId(),
@@ -628,17 +640,17 @@ abstract class AbstractPersistenceTest {
         Instant now = Instant.now().minusSeconds(60);
         data.visit(link, VisitOutcome.REDIRECTED, now, "203.0.113.1");
         data.visit(link, VisitOutcome.DENIED, now, "203.0.113.1");
-        var period = fr.enimaloc.blinder.stats.StatsPeriod.D7;
+        var period = StatsPeriod.D7;
 
-        assertThat(statsQuery.totals(owner, fr.enimaloc.blinder.stats.StatsScope.all(), period).total()).isEqualTo(2);
-        assertThat(statsQuery.totals(owner, fr.enimaloc.blinder.stats.StatsScope.link(link.getId()), period).uniqueIps()).isEqualTo(1);
-        assertThat(statsQuery.topCountries(owner, fr.enimaloc.blinder.stats.StatsScope.all(), period)).hasSize(1);
-        assertThat(statsQuery.topReferers(owner, fr.enimaloc.blinder.stats.StatsScope.link(link.getId()), period)).hasSize(1);
-        assertThat(statsQuery.topLinks(owner, fr.enimaloc.blinder.stats.StatsScope.all(), period)).hasSize(1);
-        assertThat(statsQuery.recent(owner, fr.enimaloc.blinder.stats.StatsScope.all(), period, 50)).hasSize(2);
-        assertThat(statsQuery.daily(owner, fr.enimaloc.blinder.stats.StatsScope.link(link.getId()), period)).hasSize(7);
+        assertThat(statsQuery.totals(owner, StatsScope.all(), period).total()).isEqualTo(2);
+        assertThat(statsQuery.totals(owner, StatsScope.link(link.getId()), period).uniqueIps()).isEqualTo(1);
+        assertThat(statsQuery.topCountries(owner, StatsScope.all(), period)).hasSize(1);
+        assertThat(statsQuery.topReferers(owner, StatsScope.link(link.getId()), period)).hasSize(1);
+        assertThat(statsQuery.topLinks(owner, StatsScope.all(), period)).hasSize(1);
+        assertThat(statsQuery.recent(owner, StatsScope.all(), period, 50)).hasSize(2);
+        assertThat(statsQuery.daily(owner, StatsScope.link(link.getId()), period)).hasSize(7);
         StringWriter csv = new StringWriter();
-        statsQuery.exportCsv(owner, fr.enimaloc.blinder.stats.StatsScope.all(), period, csv);
+        statsQuery.exportCsv(owner, StatsScope.all(), period, csv);
         assertThat(csv.toString().split("\r\n")).hasSize(3);
     }
 
@@ -809,7 +821,7 @@ abstract class AbstractPersistenceTest {
         NotificationChannel hook = data.channel(owner, "hook", ChannelType.WEBHOOK, "https://hooks.example/a");
         LinkNotificationSettings settings = new LinkNotificationSettings(links.getReferenceById(second.getId()));
         settings.setOnExpired(true);
-        settings.setChannels(new java.util.HashSet<>(Set.of(hook)));
+        settings.setChannels(new HashSet<>(Set.of(hook)));
         settingsRepository.saveAndFlush(settings);
         // Lien d'un autre propriétaire glissé dans la liste : ni ses appareils ni ses réglages ne sortent.
         User stranger = data.admin("stranger");
@@ -843,7 +855,7 @@ abstract class AbstractPersistenceTest {
         data.credential(data.device(stranger, "foreign"), data.domain("foreign.example.com", stranger));
 
         assertThat(deviceService.list(owner)).extracting(r -> r.device().getName(), DeviceRow::domainCount)
-                .containsExactly(org.assertj.core.groups.Tuple.tuple("laptop", 0L),
-                        org.assertj.core.groups.Tuple.tuple("phone", 2L));
+                .containsExactly(Tuple.tuple("laptop", 0L),
+                        Tuple.tuple("phone", 2L));
     }
 }

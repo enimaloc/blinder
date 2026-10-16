@@ -13,6 +13,7 @@ import org.springframework.context.annotation.Import;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.function.Consumer;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -47,7 +48,7 @@ class ExpiryScannerTest {
         hook = data.channel(admin, "hook", ChannelType.WEBHOOK, "https://example.com/h");
     }
 
-    Link link(String slug, boolean notify, java.util.function.Consumer<Link> config) {
+    Link link(String slug, boolean notify, Consumer<Link> config) {
         Link l = new Link(domain, slug, "https://example.com/t", admin);
         config.accept(l);
         l = data.save(l);
