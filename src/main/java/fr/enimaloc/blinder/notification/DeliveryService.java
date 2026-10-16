@@ -85,9 +85,7 @@ public class DeliveryService {
 
     @Transactional(readOnly = true)
     public List<NotificationDelivery> recent(User owner) {
-        List<NotificationDelivery> found = deliveries.findTop100ByOwnerOrderByCreatedAtDesc(owner);
-        found.forEach(d -> d.getChannel().getName());
-        return found;
+        return deliveries.findTop100ByOwnerOrderByCreatedAtDesc(owner);
     }
 
     /**
