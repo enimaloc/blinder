@@ -33,11 +33,19 @@ public class ApiExceptionResolver implements HandlerExceptionResolver {
         if (!new ApiRequestMatcher().matches(request)) {
             return null;
         }
+        if (response.isCommitted()) {
+            // Trop tard pour écrire un problème : le corps est déjà parti, on laisse le conteneur finir la réponse.
+            log.warn("Réponse déjà engagée, problème d'API non écrit pour {} {}", request.getMethod(),
+                    request.getRequestURI(), ex);
+            return new ModelAndView();
+        }
         HttpStatusCode status = HttpStatus.INTERNAL_SERVER_ERROR;
         if (ex instanceof ErrorResponse error) {
             status = error.getStatusCode();
             error.getHeaders().forEach((name, values) -> values.forEach(value -> response.addHeader(name, value)));
-        } else {
+        }
+        if (status.is5xxServerError()) {
+            // Une ErrorResponse 5xx est une panne serveur comme une autre : elle doit laisser une trace en ERROR.
             log.error("Erreur inattendue sur {} {}", request.getMethod(), request.getRequestURI(), ex);
         }
         HttpStatus resolved = HttpStatus.resolve(status.value());
