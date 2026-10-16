@@ -418,6 +418,43 @@ class LinkApiTest {
     }
 
     @Test
+    void notificationChangeBumpsVersionSoConcurrentPatchConflicts() throws Exception {
+        MvcResult created = mvc.perform(jsonBody(post(BASE), """
+                        {"domainId":"%s","slug":"race","targetUrl":"https://example.org/1"}
+                        """.formatted(domain.getId())))
+                .andExpect(status().isCreated()).andReturn();
+        JsonNode node = read(created);
+        String id = node.get("id").asString();
+        long version = node.get("version").asLong();
+
+        mvc.perform(jsonBody(patch(BASE + "/" + id), """
+                        {"notifications":{"exhausted":true},"version":%d}
+                        """.formatted(version)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.notifications.exhausted").value(true))
+                .andExpect(jsonPath("$.version").value(org.hamcrest.Matchers.greaterThan((int) version)));
+
+        mvc.perform(jsonBody(patch(BASE + "/" + id), """
+                        {"targetUrl":"https://example.org/2","version":%d}
+                        """.formatted(version)))
+                .andExpect(status().isConflict());
+        assertThat(links.findById(UUID.fromString(id)).orElseThrow().getTargetUrl()).isEqualTo("https://example.org/1");
+        assertThat(notifications.settingsFor(UUID.fromString(id)).orElseThrow().isOnExhausted()).isTrue();
+    }
+
+    @Test
+    void unchangedNotificationsKeepVersion() throws Exception {
+        String id = createAndGetId("""
+                {"domainId":"%s","slug":"same","targetUrl":"https://example.org/1",
+                 "notifications":{"exhausted":true}}
+                """.formatted(domain.getId()));
+        long version = links.findById(UUID.fromString(id)).orElseThrow().getVersion();
+        mvc.perform(jsonBody(patch(BASE + "/" + id), "{\"notifications\":{\"exhausted\":true}}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.version").value((int) version));
+    }
+
+    @Test
     void listIsPaginatedNewestFirst() throws Exception {
         for (int i = 0; i < 5; i++) {
             createAndGetId("""

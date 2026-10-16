@@ -38,8 +38,9 @@ public class LinkNotificationService {
         resolveChannels(owner, form);
     }
 
+    /** @return {@code true} si les réglages enregistrés ont changé (création, modification ou suppression) */
     @Transactional
-    public void apply(User owner, Link link, LinkForm form) {
+    public boolean apply(User owner, Link link, LinkForm form) {
         Set<NotificationChannel> selected = resolveChannels(owner, form);
         boolean anyTrigger = form.isNotifyExhausted() || form.isNotifyExpired() || form.isNotifyDenials()
                 || form.isNotifyEachVisit() || form.getNotifyThreshold() != null;
@@ -47,8 +48,9 @@ public class LinkNotificationService {
         rearm(link.getId(), existing.orElse(null), form);
         if (!anyTrigger && selected.isEmpty()) {
             existing.ifPresent(settings::delete);
-            return;
+            return existing.isPresent();
         }
+        boolean changed = existing.map(s -> differs(s, form, selected)).orElse(true);
         LinkNotificationSettings s = existing.orElseGet(
                 () -> new LinkNotificationSettings(links.getReferenceById(link.getId())));
         s.setOnExhausted(form.isNotifyExhausted());
@@ -59,6 +61,20 @@ public class LinkNotificationService {
         s.getChannels().clear();
         s.getChannels().addAll(selected);
         settings.save(s);
+        return changed;
+    }
+
+    private static boolean differs(LinkNotificationSettings s, LinkForm form, Set<NotificationChannel> selected) {
+        return s.isOnExhausted() != form.isNotifyExhausted()
+                || s.isOnExpired() != form.isNotifyExpired()
+                || s.isOnDenials() != form.isNotifyDenials()
+                || s.isOnEachVisit() != form.isNotifyEachVisit()
+                || !Objects.equals(s.getVisitThreshold(), form.getNotifyThreshold())
+                || !ids(s.getChannels()).equals(ids(selected));
+    }
+
+    private static Set<UUID> ids(Set<NotificationChannel> channels) {
+        return channels.stream().map(NotificationChannel::getId).collect(Collectors.toSet());
     }
 
     /** Réarme ce qui a changé : seuil modifié, ou case « épuisé »/« expiré »/seuil nouvellement activée. */

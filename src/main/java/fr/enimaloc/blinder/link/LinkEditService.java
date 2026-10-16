@@ -5,6 +5,8 @@ import fr.enimaloc.blinder.notification.LinkNotificationService;
 import fr.enimaloc.blinder.tag.TagNames;
 import fr.enimaloc.blinder.tag.TagService;
 import fr.enimaloc.blinder.user.User;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -22,6 +24,7 @@ public class LinkEditService {
     private final LinkNotificationService notifications;
     private final LinkPreviewService previews;
     private final TagService tags;
+    private final EntityManager entityManager;
 
     @Transactional
     public Link create(User owner, LinkForm form) {
@@ -37,7 +40,11 @@ public class LinkEditService {
         notifications.validate(owner, form);
         Link updated = links.update(owner, id, form);
         tags.apply(owner, updated, TagNames.parseList(form.getTags()));
-        notifications.apply(owner, updated, form);
+        if (notifications.apply(owner, updated, form)) {
+            // Réglages dans une table à part : sans ce verrou, deux éditions concurrentes basées sur la même
+            // version (l'une sur les notifications, l'autre sur le lien) passeraient toutes deux.
+            entityManager.lock(updated, LockModeType.OPTIMISTIC_FORCE_INCREMENT);
+        }
         return updated;
     }
 
