@@ -43,6 +43,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -740,6 +741,21 @@ abstract class AbstractPersistenceTest {
         assertThat(apiTokens.touch(token.getId(), now.plusSeconds(10), now.minusSeconds(50))).isZero();
         assertThat(apiTokens.touch(token.getId(), now.plusSeconds(120), now.plusSeconds(60))).isEqualTo(1);
         assertThat(apiTokens.findById(token.getId()).orElseThrow().getLastUsedAt()).isEqualTo(now.plusSeconds(120));
+    }
+
+    @Test
+    void searchIgnoresCaseOfAccentedLetters() {
+        data.link(domain, "ete", "https://exemple.fr/été");
+        data.link(domain, "hiver", "https://exemple.fr/hiver");
+        data.link(domain, "majuscules", "https://exemple.fr/ÉTÉ-INDIEN");
+
+        var found = linkService.search(owner, null, null, "ÉTÉ", PageRequest.of(0, 10));
+        assertThat(found.getContent()).extracting(Link::getTargetUrl)
+                .containsExactlyInAnyOrder("https://exemple.fr/été", "https://exemple.fr/ÉTÉ-INDIEN");
+        assertThat(linkService.search(owner, null, null, "été", PageRequest.of(0, 10)).getTotalElements())
+                .isEqualTo(2);
+        assertThat(linkService.search(owner, null, null, "HIVER", PageRequest.of(0, 10)).getContent())
+                .extracting(Link::getSlug).containsExactly("hiver");
     }
 
     @Test

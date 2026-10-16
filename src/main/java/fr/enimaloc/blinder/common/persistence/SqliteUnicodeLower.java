@@ -1,0 +1,35 @@
+package fr.enimaloc.blinder.common.persistence;
+
+import org.sqlite.Function;
+import org.sqlite.SQLiteConnection;
+
+import java.sql.Connection;
+import java.sql.SQLException;
+import java.util.Locale;
+
+/**
+ * {@code blinder_lower(x)} : minuscules Unicode (le {@code lower()} natif de SQLite ne traite que l'ASCII).
+ * Enregistrée sur chaque connexion SQLite ({@link SqliteFunctionsDataSource}) et utilisée par
+ * {@link BlinderSqliteDialect} à la place de {@code lower()}.
+ */
+final class SqliteUnicodeLower extends Function {
+
+    static final String NAME = "blinder_lower";
+
+    private static final int SQLITE_NULL = 5;
+
+    /** Une instance par connexion : l'état d'appel de {@link Function} n'est pas partageable. */
+    static void register(Connection connection) throws SQLException {
+        Function.create(connection.unwrap(SQLiteConnection.class), NAME, new SqliteUnicodeLower(), 1,
+                Function.FLAG_DETERMINISTIC);
+    }
+
+    @Override
+    protected void xFunc() throws SQLException {
+        if (value_type(0) == SQLITE_NULL) {
+            result();
+        } else {
+            result(value_text(0).toLowerCase(Locale.ROOT));
+        }
+    }
+}
