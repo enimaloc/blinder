@@ -12,6 +12,9 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Primary;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpHeaders;
@@ -21,6 +24,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.UUID;
 
 import static org.hamcrest.Matchers.hasSize;
@@ -30,8 +34,18 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @SpringBootTest
 @AutoConfigureMockMvc
-@Import(TestData.class)
+@Import({TestData.class, StatsApiTest.FixedClock.class})
 class StatsApiTest {
+
+    /** Horloge figée à midi UTC : le « jour courant » ne bascule pas pendant le test. */
+    @TestConfiguration
+    static class FixedClock {
+        @Bean
+        @Primary
+        Clock fixedClock() {
+            return Clock.fixed(Instant.parse("2026-10-16T12:00:00Z"), ZoneOffset.UTC);
+        }
+    }
 
     static final String URL = "/_/api/v1/stats";
 
