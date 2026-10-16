@@ -157,17 +157,20 @@ public class VisitWriter implements SmartLifecycle {
             return transactions.execute(status -> persist(enriched));
         } catch (Throwable t) {
             // Typiquement un lien supprimé entre sa lecture et la validation : on isole la ou les visites fautives.
-            log.warn("Écriture d'un lot de {} visites impossible, nouvel essai visite par visite", enriched.size(), t);
+            // Une seule trace complète par lot, même si la base est indisponible pour toutes ses visites.
+            log.error("Écriture d'un lot de {} visites impossible, nouvel essai visite par visite", enriched.size(), t);
             return writeOneByOne(enriched);
         }
     }
 
     /**
      * Une transaction par visite : le lien est relu, donc une visite d'un lien supprimé entre-temps est ignorée
-     * (comme à l'ordinaire) ; seules les visites dont l'écriture échoue encore sont comptées comme perdues.
+     * (comme à l'ordinaire) ; seules les visites dont l'écriture échoue encore sont comptées comme perdues. Chaque
+     * échec individuel n'est journalisé qu'en DEBUG, suivi d'une ligne de synthèse pour le lot.
      */
     private List<Visit> writeOneByOne(List<Enriched> enriched) {
         List<Visit> written = new ArrayList<>(enriched.size());
+        int lost = 0;
         for (Enriched e : enriched) {
             try {
                 List<Visit> one = transactions.execute(status -> persist(List.of(e)));
@@ -175,9 +178,15 @@ public class VisitWriter implements SmartLifecycle {
                     written.addAll(one);
                 }
             } catch (Throwable t) {
-                log.error("Écriture d'une visite du lien {} impossible, visite abandonnée", e.record().linkId(), t);
-                dropped.incrementAndGet();
+                log.debug("Écriture d'une visite du lien {} impossible, visite abandonnée", e.record().linkId(), t);
+                lost++;
             }
+        }
+        dropped.addAndGet(lost);
+        if (lost > 0) {
+            log.error("Nouvel essai visite par visite : {} visite(s) perdue(s) sur {}", lost, enriched.size());
+        } else {
+            log.warn("Nouvel essai visite par visite : aucune visite perdue sur {}", enriched.size());
         }
         return written;
     }

@@ -5,7 +5,12 @@ import fr.enimaloc.blinder.domain.Domain;
 import fr.enimaloc.blinder.link.Link;
 import fr.enimaloc.blinder.link.LinkRepository;
 import fr.enimaloc.blinder.support.TestData;
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import org.junit.jupiter.api.BeforeEach;
+import org.slf4j.LoggerFactory;
 import org.mockito.AdditionalAnswers;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.ObjectProvider;
@@ -58,6 +63,11 @@ class VisitWriterTest {
     }
 
     VisitWriter writer(LinkRepository linkRepository, int capacity, GeoLocator geo, VisitBatchListener... listeners) {
+        return writer(linkRepository, tx, capacity, geo, listeners);
+    }
+
+    VisitWriter writer(LinkRepository linkRepository, TransactionTemplate transactions, int capacity, GeoLocator geo,
+                       VisitBatchListener... listeners) {
         ObjectProvider<VisitBatchListener> provider = new ObjectProvider<>() {
             @Override
             public java.util.stream.Stream<VisitBatchListener> orderedStream() {
@@ -69,7 +79,7 @@ class VisitWriterTest {
                 return orderedStream();
             }
         };
-        return new VisitWriter(linkRepository, visits, stats, tx, new StatsProperties(Duration.ofDays(90), capacity,
+        return new VisitWriter(linkRepository, visits, stats, transactions, new StatsProperties(Duration.ofDays(90), capacity,
                 Duration.ofMillis(50), false), blinder, geo, provider);
     }
 
@@ -143,6 +153,38 @@ class VisitWriterTest {
         assertThat(received).extracting(Visit::getIp).containsExactlyInAnyOrder("1.1.1.1", "1.1.1.3");
         // Les visites d'un lien supprimé ne sont pas « perdues » : elles auraient disparu avec lui.
         assertThat(w.dropped()).isZero();
+    }
+
+    @Test
+    void databaseOutageLogsOneTraceAndOneSummaryPerBatch() {
+        TransactionTemplate down = new TransactionTemplate() {
+            @Override
+            public <T> T execute(org.springframework.transaction.support.TransactionCallback<T> action) {
+                throw new org.springframework.dao.DataAccessResourceFailureException("base indisponible");
+            }
+        };
+        ListAppender<ILoggingEvent> logs = new ListAppender<>();
+        Logger logger = (Logger) LoggerFactory.getLogger(VisitWriter.class);
+        logs.start();
+        logger.addAppender(logs);
+        try {
+            VisitWriter w = writer(links, down, 10, new NoopGeoLocator());
+            for (int i = 0; i < 5; i++) {
+                w.offer(record(link.getId(), Instant.now(), "1.1.1." + i));
+            }
+            assertThatCode(w::flush).doesNotThrowAnyException();
+
+            assertThat(w.dropped()).isEqualTo(5);
+            List<ILoggingEvent> errors = logs.list.stream().filter(e -> e.getLevel() == Level.ERROR).toList();
+            assertThat(errors).hasSize(2);
+            assertThat(errors).filteredOn(e -> e.getThrowableProxy() != null).singleElement()
+                    .satisfies(e -> assertThat(e.getFormattedMessage()).contains("lot de 5 visites"));
+            assertThat(errors).filteredOn(e -> e.getThrowableProxy() == null).singleElement()
+                    .satisfies(e -> assertThat(e.getFormattedMessage()).contains("5 visite(s) perdue(s) sur 5"));
+            assertThat(logs.list).filteredOn(e -> e.getLevel() == Level.WARN).isEmpty();
+        } finally {
+            logger.detachAppender(logs);
+        }
     }
 
     @Test
