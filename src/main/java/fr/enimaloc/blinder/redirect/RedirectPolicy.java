@@ -13,7 +13,7 @@ import java.util.Set;
 /** Statut HTTP effectif et URL cible (paramètres transmis) d'une redirection autorisée. */
 public final class RedirectPolicy {
 
-    private static final Set<String> NEVER_FORWARDED = Set.of("pw", "password", "_csrf");
+    static final Set<String> NEVER_FORWARDED = Set.of("pw", "password", "_csrf");
 
     private RedirectPolicy() {
     }
@@ -72,8 +72,8 @@ public final class RedirectPolicy {
         return out.append(fragment).toString();
     }
 
-    /** Query string brute sans les paramètres nommés (ordre et encodage des autres conservés) ; null si vide. */
-    public static String withoutParameter(String rawQuery, String name) {
+    /** Query string brute sans les paramètres nommés (ex. {@link #NEVER_FORWARDED}) (ordre et encodage des autres conservés) ; null si vide. */
+    public static String withoutParameters(String rawQuery, Set<String> names) {
         if (rawQuery == null) {
             return null;
         }
@@ -90,7 +90,7 @@ public final class RedirectPolicy {
             } catch (IllegalArgumentException e) {
                 decoded = raw;
             }
-            if (decoded.equals(name)) {
+            if (names.contains(decoded)) {
                 continue;
             }
             out.append(out.isEmpty() ? "" : "&").append(pair);

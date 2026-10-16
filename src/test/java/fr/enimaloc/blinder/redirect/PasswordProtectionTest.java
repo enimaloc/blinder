@@ -135,6 +135,21 @@ class PasswordProtectionTest {
     }
 
     @Test
+    void passwordFormActionStripsEveryCredentialParameter() throws Exception {
+        link.setForwardQuery(true);
+        data.save(link);
+        mvc.perform(get("http://go.example.com/secret?utm=1&password=x&_csrf=y&pw=z"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("action=\"/secret?utm=1\"")))
+                .andExpect(content().string(not(containsString("password=x"))))
+                .andExpect(content().string(not(containsString("_csrf=y"))))
+                .andExpect(content().string(not(containsString("pw=z"))));
+        mvc.perform(post("http://go.example.com/secret?utm=1").with(csrf()).param("password", "open-sesame"))
+                .andExpect(status().isSeeOther())
+                .andExpect(redirectedUrl(TARGET + "?utm=1"));
+    }
+
+    @Test
     void formWithoutCsrfIsRejected() throws Exception {
         mvc.perform(post("http://go.example.com/secret").param("password", "open-sesame"))
                 .andExpect(status().isForbidden());
