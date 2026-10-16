@@ -15,7 +15,6 @@ import jakarta.validation.Validator;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
-import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.util.Arrays;
@@ -164,8 +163,9 @@ public class LinkApiMapper {
         set(in.getSlug(), form::setSlug);
         set(in.getTargetUrl(), form::setTargetUrl);
         set(in.getEnabled(), form::setEnabled);
-        set(toLocal(in.getNotBefore()), form::setNotBefore);
-        set(toLocal(in.getExpiresAt()), form::setExpiresAt);
+        // Instants exacts : une heure locale seule serait ambiguë dans l'heure répétée (passage à l'heure d'hiver).
+        set(in.getNotBefore(), value -> form.exactNotBefore(value.toInstant(), zone));
+        set(in.getExpiresAt(), value -> form.exactExpiresAt(value.toInstant(), zone));
         set(in.getTtlMinutes(), form::setTtlMinutes);
         set(in.getMaxUses(), form::setMaxUses);
         set(in.getDeniedUrl(), form::setDeniedUrl);
@@ -235,9 +235,5 @@ public class LinkApiMapper {
 
     private OffsetDateTime toOffset(Instant instant) {
         return instant == null ? null : instant.atZone(zone).toOffsetDateTime();
-    }
-
-    private LocalDateTime toLocal(OffsetDateTime value) {
-        return value == null ? null : value.atZoneSameInstant(zone).toLocalDateTime();
     }
 }

@@ -6,11 +6,15 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
+import lombok.AccessLevel;
 import lombok.Data;
+import lombok.Setter;
 import lombok.ToString;
 import org.springframework.format.annotation.DateTimeFormat;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.LinkedHashSet;
 import java.util.Set;
 import java.util.UUID;
@@ -38,6 +42,16 @@ public class LinkForm {
 
     @DateTimeFormat(pattern = DATETIME_LOCAL)
     private LocalDateTime expiresAt;
+
+    /**
+     * Instants exacts fournis par l'API, prioritaires sur {@link #notBefore}/{@link #expiresAt} quand ils leur
+     * correspondent (heure répétée au passage à l'heure d'hiver). Sans setter : le panel ne peut pas les lier.
+     */
+    @Setter(AccessLevel.NONE)
+    private Instant exactNotBefore;
+
+    @Setter(AccessLevel.NONE)
+    private Instant exactExpiresAt;
 
     @Positive
     @Max(5_256_000)
@@ -105,6 +119,18 @@ public class LinkForm {
     /** Noms séparés par des virgules ; les inconnus sont créés. */
     @Size(max = 1000)
     private String tags;
+
+    /** Date d'activation exacte (API) ; renseigne aussi l'heure locale correspondante dans {@code zone}. */
+    public void exactNotBefore(Instant instant, ZoneId zone) {
+        this.exactNotBefore = instant;
+        this.notBefore = LocalDateTime.ofInstant(instant, zone);
+    }
+
+    /** Date d'expiration exacte (API) ; renseigne aussi l'heure locale correspondante dans {@code zone}. */
+    public void exactExpiresAt(Instant instant, ZoneId zone) {
+        this.exactExpiresAt = instant;
+        this.expiresAt = LocalDateTime.ofInstant(instant, zone);
+    }
 
     /** Le formulaire posté déclare-t-il une limite ou une protection (pour l'avertissement d'aperçu) ? */
     public boolean declaresLimitOrProtection(boolean hasExistingPassword) {

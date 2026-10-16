@@ -273,7 +273,15 @@ Les erreurs sont des `application/problem+json` (RFC 9457) :
   ou course entre deux créations du même slug.
 
 Les dates sont en ISO-8601 avec décalage (`2026-10-16T14:30:00+02:00`), dans le fuseau
-de l'administrateur.
+de l'administrateur. Une date envoyée est enregistrée à l'instant exact, y compris dans
+l'heure répétée du passage à l'heure d'hiver (`02:30+02:00` et `02:30+01:00` restent
+distincts).
+
+Dans le panel, les dates sont saisies à la minute, en heure locale du fuseau de
+l'administrateur. Une date laissée telle quelle est conservée à l'identique (secondes et
+décalage compris) et ne réarme pas l'alerte « expiré ». Limite connue : une nouvelle date
+saisie dans l'heure répétée (ex. 02:30 le dernier dimanche d'octobre à Paris) prend le
+premier décalage (heure d'été) ; passer par l'API pour viser la seconde occurrence.
 
 ### Domaines
 

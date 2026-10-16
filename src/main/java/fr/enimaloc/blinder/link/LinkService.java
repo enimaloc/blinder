@@ -33,6 +33,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.LinkedHashSet;
@@ -272,8 +273,8 @@ public class LinkService {
         if (deniedUrl != null && !UrlPolicy.isHttpUrl(deniedUrl)) {
             throw new FieldErrorException("deniedUrl", "URL http(s) absolue requise");
         }
-        Instant notBefore = toInstant(form.getNotBefore());
-        Instant expiresAt = toInstant(form.getExpiresAt());
+        Instant notBefore = resolveDate(form.getNotBefore(), form.getExactNotBefore(), link.getNotBefore());
+        Instant expiresAt = resolveDate(form.getExpiresAt(), form.getExactExpiresAt(), link.getExpiresAt());
         if (notBefore != null && expiresAt != null && !notBefore.isBefore(expiresAt)) {
             throw new FieldErrorException("expiresAt", "L'expiration doit être postérieure à l'activation");
         }
@@ -347,8 +348,27 @@ public class LinkService {
         }
     }
 
-    private Instant toInstant(LocalDateTime local) {
-        return local == null ? null : local.atZone(zone).toInstant();
+    /**
+     * Instant d'une date du formulaire, sans ambiguïté autour des changements d'heure :
+     * l'instant exact (API) s'il correspond à l'heure locale ; sinon l'instant actuel si l'heure locale est
+     * inchangée (à la minute près, précision du panel) ; sinon le premier décalage dans l'heure répétée.
+     */
+    Instant resolveDate(LocalDateTime local, Instant exact, Instant current) {
+        if (local == null) {
+            return null;
+        }
+        if (exact != null && local.equals(toLocal(exact))) {
+            return exact;
+        }
+        if (current != null) {
+            LocalDateTime currentLocal = toLocal(current);
+            boolean minutePrecision = local.getSecond() == 0 && local.getNano() == 0;
+            if (local.equals(currentLocal)
+                    || (minutePrecision && local.equals(currentLocal.truncatedTo(ChronoUnit.MINUTES)))) {
+                return current;
+            }
+        }
+        return local.atZone(zone).toInstant();
     }
 
     private LocalDateTime toLocal(Instant instant) {
