@@ -57,7 +57,10 @@ Chaque visite d'un lien (redirigée, refusée, défi, aperçu) est consignée de
 asynchrone : le chemin de redirection n'attend jamais la base. Les visites passent
 par une file mémoire (`blinder.stats.queue-capacity`) vidée par un thread d'écriture
 au plus toutes les `blinder.stats.flush-interval`. Si la file est pleine, la visite
-est abandonnée et le compteur « visites perdues » du tableau de bord augmente.
+est abandonnée et le compteur « visites perdues » du tableau de bord augmente. Un lot
+dont l'écriture échoue (par exemple un lien supprimé pendant le lot) est réécrit visite
+par visite : seules les visites réellement perdues sont comptées, les visites d'un lien
+supprimé disparaissant avec lui.
 
 - Tableau de bord global : `/_/stats` ; par lien : `/_/links/{id}/stats` (période
   7, 30, 90 ou 365 jours).
@@ -127,9 +130,12 @@ redirection suivie, délai de 5 s). En-têtes :
 
 Livraison au moins une fois : dédupliquer sur `X-Blinder-Delivery`.
 
-Limites connues : le temps de résolution DNS n'est pas couvert par le délai de 5 s ;
-des visites peuvent être perdues si la file déborde (compteur affiché dans les
-statistiques) ; un lien supprimé en cours de lot fait perdre les visites de ce lot.
+La résolution DNS a son propre délai de 5 s (en plus du délai de la requête) ; au-delà,
+l'essai échoue et est retenté comme tout autre échec. L'aperçu des liens borne de même
+sa résolution DNS à son délai de 3 s.
+
+Limite connue : des visites peuvent être perdues si la file déborde (compteur affiché
+dans les statistiques).
 
 Vérification en shell (`BODY` = corps brut reçu) :
 
@@ -181,7 +187,7 @@ Tout autre changement (cible, tags, métadonnées, protections…) ne réarme ri
 | `blinder.geoip.database` | vide | Chemin de la base GeoLite2 `.mmdb` |
 | `blinder.notifications.mail-from` | `blinder@localhost` | Expéditeur des e-mails |
 | `blinder.notifications.denials.threshold` | `10` | Refus déclenchant l'alerte |
-| `blinder.notifications.denials.window` | `10m` | Fenêtre glissante de comptage des refus |
+| `blinder.notifications.denials.window` | `10m` | Fenêtre glissante de comptage des refus (en mémoire, 10 000 liens suivis au plus) |
 | `blinder.notifications.denials.cooldown` | `1h` | Silence après une alerte de refus |
 | `blinder.scheduling.enabled` | `true` | Active les tâches planifiées (purge, envois, expiration) |
 | `spring.mail.*` | vide | Serveur SMTP |
