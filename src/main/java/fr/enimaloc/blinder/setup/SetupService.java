@@ -4,6 +4,7 @@ import fr.enimaloc.blinder.common.FieldErrorException;
 import fr.enimaloc.blinder.common.HostNormalizer;
 import fr.enimaloc.blinder.domain.Domain;
 import fr.enimaloc.blinder.domain.DomainRepository;
+import fr.enimaloc.blinder.security.AdminRequestMatcher;
 import fr.enimaloc.blinder.user.Role;
 import fr.enimaloc.blinder.user.User;
 import fr.enimaloc.blinder.user.UserRepository;
@@ -26,6 +27,7 @@ public class SetupService {
     private final DomainRepository domains;
     private final PasswordEncoder encoder;
     private final TransactionTemplate transactions;
+    private final AdminRequestMatcher adminMatcher;
 
     /** Sérialisé : deux soumissions simultanées ne peuvent pas créer deux admins. */
     public synchronized void complete(SetupForm form) {
@@ -44,6 +46,9 @@ public class SetupService {
         String host = HostNormalizer.normalize(form.getHost());
         if (!HostNormalizer.isValid(host)) {
             throw new FieldErrorException("host", "Nom de domaine invalide");
+        }
+        if (adminMatcher.isAdminHost(host)) {
+            throw new FieldErrorException("host", "Ce domaine est réservé au panel d'administration");
         }
         transactions.executeWithoutResult(status -> {
             if (users.count() > 0) {

@@ -2,6 +2,7 @@ package fr.enimaloc.blinder.setup;
 
 import fr.enimaloc.blinder.common.FieldErrorException;
 import fr.enimaloc.blinder.common.HostNormalizer;
+import fr.enimaloc.blinder.security.AdminRequestMatcher;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -22,12 +23,15 @@ public class SetupController {
 
     private final SetupGuard guard;
     private final SetupService setup;
+    private final AdminRequestMatcher adminMatcher;
 
     @GetMapping
     public String form(HttpServletRequest request, Model model) {
         requirePending();
         SetupForm form = new SetupForm();
-        form.setHost(HostNormalizer.normalize(request.getServerName()));
+        if (!adminMatcher.isAdminDomain(request)) {
+            form.setHost(HostNormalizer.normalize(request.getServerName()));
+        }
         model.addAttribute("form", form);
         return "admin/setup";
     }

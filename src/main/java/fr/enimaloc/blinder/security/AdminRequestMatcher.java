@@ -20,7 +20,12 @@ public class AdminRequestMatcher implements RequestMatcher {
     }
 
     public boolean isAdminDomain(HttpServletRequest request) {
-        return adminDomain != null && adminDomain.equals(HostNormalizer.normalize(request.getServerName()));
+        return isAdminHost(request.getServerName());
+    }
+
+    /** @return {@code true} si {@code host} (normalisé ici) est le domaine dédié au panel d'administration. */
+    public boolean isAdminHost(String host) {
+        return adminDomain != null && adminDomain.equals(HostNormalizer.normalize(host));
     }
 
     @Override

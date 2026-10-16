@@ -3,9 +3,9 @@ package fr.enimaloc.blinder.domain;
 import fr.enimaloc.blinder.common.FieldErrorException;
 import fr.enimaloc.blinder.common.HostNormalizer;
 import fr.enimaloc.blinder.common.UrlPolicy;
-import fr.enimaloc.blinder.common.BlinderProperties;
 import fr.enimaloc.blinder.common.StaleEditException;
 import fr.enimaloc.blinder.link.LinkRepository;
+import fr.enimaloc.blinder.security.AdminRequestMatcher;
 import fr.enimaloc.blinder.user.User;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -21,13 +21,12 @@ public class DomainService {
 
     private final DomainRepository domains;
     private final LinkRepository links;
-    private final String adminDomain;
+    private final AdminRequestMatcher adminMatcher;
 
-    public DomainService(DomainRepository domains, LinkRepository links, BlinderProperties properties) {
+    public DomainService(DomainRepository domains, LinkRepository links, AdminRequestMatcher adminMatcher) {
         this.domains = domains;
         this.links = links;
-        String configured = properties.admin().domain();
-        this.adminDomain = configured == null || configured.isBlank() ? null : HostNormalizer.normalize(configured);
+        this.adminMatcher = adminMatcher;
     }
 
     @Transactional(readOnly = true)
@@ -84,7 +83,7 @@ public class DomainService {
         if (!HostNormalizer.isValid(host)) {
             throw new FieldErrorException("host", "Nom de domaine invalide");
         }
-        if (host.equals(adminDomain)) {
+        if (adminMatcher.isAdminHost(host)) {
             throw new FieldErrorException("host", "Ce domaine est réservé au panel d'administration");
         }
         domains.findByHost(host)
