@@ -12,7 +12,9 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Clock;
 import java.time.Duration;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -29,8 +31,12 @@ public class DeviceService {
 
     @Transactional(readOnly = true)
     public List<DeviceRow> list(User owner) {
+        Map<UUID, Long> counts = new HashMap<>();
+        for (Object[] row : credentials.countByDeviceForOwner(owner)) {
+            counts.put((UUID) row[0], ((Number) row[1]).longValue());
+        }
         return devices.findAllByOwnerOrderByName(owner).stream()
-                .map(device -> new DeviceRow(device, credentials.countByDeviceId(device.getId())))
+                .map(device -> new DeviceRow(device, counts.getOrDefault(device.getId(), 0L)))
                 .toList();
     }
 

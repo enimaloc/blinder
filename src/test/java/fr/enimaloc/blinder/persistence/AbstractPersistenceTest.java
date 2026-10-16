@@ -6,6 +6,7 @@ import fr.enimaloc.blinder.device.Device;
 import fr.enimaloc.blinder.device.DeviceCredentialRepository;
 import fr.enimaloc.blinder.device.DeviceEnrollmentRepository;
 import fr.enimaloc.blinder.device.DeviceRepository;
+import fr.enimaloc.blinder.device.DeviceRow;
 import fr.enimaloc.blinder.device.DeviceTokens;
 import fr.enimaloc.blinder.domain.Domain;
 import fr.enimaloc.blinder.access.DenyReason;
@@ -124,6 +125,8 @@ abstract class AbstractPersistenceTest {
     fr.enimaloc.blinder.link.LinkEditService linkEdits;
     @Autowired
     fr.enimaloc.blinder.notification.LinkNotificationService linkNotifications;
+    @Autowired
+    fr.enimaloc.blinder.device.DeviceService deviceService;
 
     User owner;
     Domain domain;
@@ -766,5 +769,20 @@ abstract class AbstractPersistenceTest {
         assertThat(settingsByLink.get(second.getId()).isOnExpired()).isTrue();
         assertThat(settingsByLink.get(second.getId()).getChannels()).extracting(NotificationChannel::getId)
                 .containsExactly(hook.getId());
+    }
+
+    @Test
+    void countsDomainsOfEachDeviceInOneQuery() {
+        Domain other = data.domain("other.example.com", owner);
+        Device phone = data.device(owner, "phone");
+        Device laptop = data.device(owner, "laptop");
+        data.credential(phone, domain);
+        data.credential(phone, other);
+        User stranger = data.admin("stranger");
+        data.credential(data.device(stranger, "foreign"), data.domain("foreign.example.com", stranger));
+
+        assertThat(deviceService.list(owner)).extracting(r -> r.device().getName(), DeviceRow::domainCount)
+                .containsExactly(org.assertj.core.groups.Tuple.tuple("laptop", 0L),
+                        org.assertj.core.groups.Tuple.tuple("phone", 2L));
     }
 }
