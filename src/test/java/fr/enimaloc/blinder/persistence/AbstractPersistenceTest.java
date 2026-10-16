@@ -120,6 +120,8 @@ abstract class AbstractPersistenceTest {
 
     @Autowired
     LinkService linkService;
+    @Autowired
+    fr.enimaloc.blinder.link.LinkEditService linkEdits;
 
     User owner;
     Domain domain;
@@ -159,6 +161,20 @@ abstract class AbstractPersistenceTest {
         assertThat(found.getCreatedAt()).isNotNull();
         assertThat(found.getVersion()).isNotNull();
         assertThat(found.getDomain().getId()).isEqualTo(domain.getId());
+    }
+
+    @Test
+    void notificationOnlyEditBumpsLinkVersion() {
+        Link link = data.link(domain, "notif", "https://example.com/n");
+        long before = links.findById(link.getId()).orElseThrow().getVersion();
+        fr.enimaloc.blinder.link.LinkForm form = new fr.enimaloc.blinder.link.LinkForm();
+        form.setDomainId(domain.getId());
+        form.setSlug("notif");
+        form.setTargetUrl("https://example.com/n");
+        form.setVersion(before);
+        form.setNotifyExhausted(true);
+        linkEdits.update(owner, link.getId(), form);
+        assertThat(links.findById(link.getId()).orElseThrow().getVersion()).isGreaterThan(before);
     }
 
     @Test
