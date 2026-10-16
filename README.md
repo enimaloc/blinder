@@ -157,6 +157,19 @@ courte.
 Par défaut, les cibles qui résolvent vers une adresse privée ou locale sont
 refusées. Cochez `allowPrivateNetwork` sur le canal pour viser un service interne.
 
+### Réarmement des alertes
+
+Une alerte déjà déclenchée (épuisé, expiré, seuil) n'est réarmée que par une
+modification qui la concerne, et non plus par n'importe quelle modification :
+
+- `EXHAUSTED` : changement de `maxUses`, remise à zéro du compteur, ou alerte
+  « épuisé » qui passe de désactivée à activée ;
+- `EXPIRED` : changement de `notBefore`, `expiresAt` ou du TTL après première
+  utilisation, remise à zéro du compteur (le TTL repart), ou alerte activée ;
+- `THRESHOLD` : changement du seuil, remise à zéro du compteur, ou alerte activée.
+
+Tout autre changement (cible, tags, métadonnées, protections…) ne réarme rien.
+
 ### Propriétés
 
 | Propriété | Défaut | Rôle |
@@ -172,3 +185,217 @@ refusées. Cochez `allowPrivateNetwork` sur le canal pour viser un service inter
 | `blinder.notifications.denials.cooldown` | `1h` | Silence après une alerte de refus |
 | `blinder.scheduling.enabled` | `true` | Active les tâches planifiées (purge, envois, expiration) |
 | `spring.mail.*` | vide | Serveur SMTP |
+| `blinder.rate-limit.api-auth.max-failures` | `20` | Jetons d'API refusés par IP avant le 429 |
+| `blinder.rate-limit.api-auth.window` | `15m` | Fenêtre de comptage des jetons refusés |
+
+## Tags
+
+Les tags classent les liens. Un nom a 1 à 40 caractères (espaces rognés, pas de
+virgule), sans distinction de casse ; la couleur est facultative (`#rrggbb`). Dans
+le formulaire d'un lien, le champ « tags » prend des noms séparés par des virgules
+(20 au plus) : les noms inconnus sont créés à la volée, sans couleur.
+
+- Page « Tags » (`/_/tags`) : liste avec le nombre de liens, renommage, couleur,
+  suppression (le tag est retiré des liens, les liens restent).
+- La liste des liens se filtre par `?tag=<id>` (combinable avec `?domain=`).
+- Le tableau de bord global des statistiques et son export CSV se filtrent par
+  `?tag=<id>` : ils agrègent les liens portant ce tag.
+
+## QR codes
+
+Chaque lien a un QR code (correction d'erreur M, noir sur blanc) qui encode son URL
+publique. Dans le panel : `/_/links/{id}/qr.svg` et `/_/links/{id}/qr.png?size=`
+(128 à 2048 px, 512 par défaut) ; `?download` force le téléchargement. La fiche du
+lien affiche le QR et les liens de téléchargement. Les réponses ne sont pas mises
+en cache (`Cache-Control: no-store`). L'API expose les mêmes images (voir ci-dessous).
+
+## API REST
+
+L'API vit sous `/_/api/v1`, quel que soit l'hôte, et parle JSON. Elle utilise les
+mêmes services que le panel : mêmes règles, mêmes messages (en français). Spring
+Data REST a été retiré : l'API est écrite à la main et n'expose jamais les entités brutes.
+
+### Jeton d'API
+
+1. Connectez-vous au panel, ouvrez « Jetons d'API » (`/_/tokens`), saisissez un nom
+   (1 à 100 caractères) et créez le jeton.
+2. Le jeton complet (`bl_` + 43 caractères) n'est affiché **qu'une seule fois** ;
+   seul son hachage SHA-256 est conservé. Perdu, il se révoque et se recrée.
+3. Envoyez-le dans chaque requête :
+
+```sh
+export BLINDER=https://go.example.com/_/api/v1
+export TOKEN=bl_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+curl -H "Authorization: Bearer $TOKEN" "$BLINDER/domains"
+```
+
+La session du panel n'authentifie **pas** l'API : seul `Authorization: Bearer bl_...`
+est accepté. Changer le mot de passe du compte ne révoque pas les jetons (révoquez-les
+explicitement dans la page). La date de dernière utilisation est mise à jour au plus
+une fois par minute.
+
+Un en-tête absent, mal formé ou un jeton inconnu donne un 401 avec
+`WWW-Authenticate: Bearer`. Après 20 jetons refusés par IP en 15 minutes
+(`blinder.rate-limit.api-auth.max-failures` et `.window`), l'API répond 429 avec
+`Retry-After`, même pour un jeton valide ; un succès ne remet pas le compteur à zéro.
+
+### Erreurs
+
+Les erreurs sont des `application/problem+json` (RFC 9457) :
+
+```json
+{"type":"about:blank","title":"Bad Request","status":400,"detail":"Données invalides",
+ "errors":{"targetUrl":"URL http(s) absolue requise"}}
+```
+
+- 400 : valeur invalide (`errors` donne un message par champ), corps illisible,
+  identifiant invalide ou inconnu **dans le corps JSON** (domaine, canal, appareil) ;
+  un slug déjà pris donne `errors.slug`.
+- 401 / 429 : voir ci-dessus.
+- 404 : identifiant inconnu ou appartenant à un autre propriétaire **dans le chemin ou
+  la requête** (`/links/{id}`, `?tag=`, `?domain=`, `?link=`...).
+- 409 : `version` fournie différente de la version courante, modification concurrente,
+  ou course entre deux créations du même slug.
+
+Les dates sont en ISO-8601 avec décalage (`2026-10-16T14:30:00+02:00`), dans le fuseau
+de l'administrateur.
+
+### Domaines
+
+```sh
+curl -H "Authorization: Bearer $TOKEN" "$BLINDER/domains"
+```
+
+```json
+[{"id":"6f1c0a52-5a53-4d1e-9d2e-0b0f6a1f2c11","host":"go.example.com"}]
+```
+
+### Liens
+
+`GET /links?domain=&tag=&q=&page=0&size=50` : `size` au plus 100, `q` filtre sans casse
+sur le slug ou l'URL cible, tri par création décroissante.
+
+```sh
+curl -H "Authorization: Bearer $TOKEN" "$BLINDER/links?tag=$TAG_ID&q=promo&size=20"
+```
+
+```json
+{"items":[{"id":"...","slug":"promo"}],"page":0,"size":20,"total":1}
+```
+
+`GET /links/{id}` renvoie la représentation d'un lien :
+
+```json
+{
+  "id": "0b8a4c7e-1f43-4c0e-8d57-5a1f8d3b2e90",
+  "domainId": "6f1c0a52-5a53-4d1e-9d2e-0b0f6a1f2c11",
+  "domain": "go.example.com",
+  "slug": "promo",
+  "url": "https://go.example.com/promo",
+  "targetUrl": "https://example.com/promo",
+  "enabled": true,
+  "notBefore": null, "expiresAt": null, "ttlMinutes": null,
+  "maxUses": 100, "useCount": 0,
+  "deniedUrl": null,
+  "hasPassword": false,
+  "ipAllowlist": [], "deviceProtected": false, "deviceIds": [],
+  "redirectStatus": 302, "forwardQuery": false,
+  "interstitial": false, "interstitialSeconds": 3,
+  "metaMode": "NONE", "metaTitle": null, "metaDescription": null, "metaImageUrl": null,
+  "tags": ["campagne"],
+  "notifications": {"exhausted": true, "expired": false, "denials": false,
+                    "eachVisit": true, "threshold": null, "channelIds": ["..."]},
+  "status": "ACTIVE",
+  "version": 0,
+  "createdAt": "2026-10-16T14:30:00+02:00",
+  "updatedAt": "2026-10-16T14:30:00+02:00"
+}
+```
+
+Le mot de passe n'est **jamais** renvoyé : `hasPassword` indique seulement s'il existe.
+`id`, `domain`, `url`, `useCount`, `hasPassword`, `status`, `createdAt` et `updatedAt`
+sont en lecture seule et ignorés à l'écriture : une représentation lue peut être
+renvoyée telle quelle.
+
+`POST /links` crée un lien (201, en-tête `Location`, corps = représentation). Les
+champs absents prennent les valeurs par défaut du formulaire ; les tags inconnus sont
+créés, et le lien et ses réglages de notification sont enregistrés dans une seule transaction :
+
+```sh
+curl -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"domainId":"6f1c0a52-5a53-4d1e-9d2e-0b0f6a1f2c11","slug":"promo",
+       "targetUrl":"https://example.com/promo","tags":["campagne"],
+       "notifications":{"eachVisit":true,"channelIds":["..."]}}' \
+  "$BLINDER/links"
+```
+
+`PUT /links/{id}` remplace le lien : un champ absent reprend sa valeur par défaut, à
+une exception près, le mot de passe. Sans `password`, le mot de passe actuel est
+conservé ; `"password": "..."` le remplace et `"removePassword": true` le supprime.
+
+```sh
+curl -X PUT -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"domainId":"6f1c0a52-5a53-4d1e-9d2e-0b0f6a1f2c11","slug":"promo",
+       "targetUrl":"https://example.com/v2","removePassword":true}' \
+  "$BLINDER/links/$LINK_ID"
+```
+
+`PATCH /links/{id}` ne change que les champs présents (fusion JSON sur la
+représentation courante ; `null` efface une valeur facultative ; `notifications` est
+fusionné champ par champ) :
+
+```sh
+curl -X PATCH -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"targetUrl":"https://example.com/v2"}' "$BLINDER/links/$LINK_ID"
+```
+
+Si `version` est fourni et diffère de la version courante : 409. Seul un
+changement qui les concerne réarme les alertes (voir « Notifications »).
+
+- `DELETE /links/{id}` : 204, supprime le lien et ses visites.
+- `POST /links/{id}/reset` : 204, remet le compteur d'utilisations à zéro.
+- `GET /links/{id}/qr.svg` et `GET /links/{id}/qr.png?size=512` : le QR code.
+
+```sh
+curl -X DELETE -H "Authorization: Bearer $TOKEN" "$BLINDER/links/$LINK_ID"
+curl -H "Authorization: Bearer $TOKEN" -o promo.png "$BLINDER/links/$LINK_ID/qr.png?size=512"
+```
+
+### Statistiques
+
+`GET /stats?link=&tag=&days=30` : `link` et `tag` s'excluent (les deux : 400) ;
+`days` vaut 7, 30, 90 ou 365 (toute autre valeur : 30). `byOutcome` utilise les noms `REDIRECTED`, `PREVIEWED`, `CHALLENGED`, `PASSWORD_REJECTED`, `DENIED`, `THROTTLED`. `topLinks` n'est présent que sans `link`.
+
+```sh
+curl -H "Authorization: Bearer $TOKEN" "$BLINDER/stats?tag=$TAG_ID&days=7"
+```
+
+```json
+{
+  "days": 7,
+  "totals": {"total": 1, "byOutcome": {"REDIRECTED": 1}, "uniqueIps": 1, "bots": 0},
+  "daily": [{"day": "2026-10-16", "redirected": 1, "refused": 0, "other": 0}],
+  "countries": [], "referers": [], "browsers": [], "os": [],
+  "topLinks": [{"label": "go.example.com/promo", "count": 1}]
+}
+```
+
+### Tags
+
+`GET /tags` liste les tags avec leur nombre de liens ; `POST /tags` en crée un (201) ;
+`PATCH /tags/{id}` modifie `name` et/ou `color` ; `DELETE /tags/{id}` répond 204
+(les liens sont conservés).
+
+```sh
+curl -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"name":"campagne","color":"#ff8800"}' "$BLINDER/tags"
+curl -X PATCH -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"color":""}' "$BLINDER/tags/$TAG_ID"
+```
+
+```json
+{"id":"3d2f6c1a-8e4b-4a5c-9b7d-1c2e3f4a5b6c","name":"campagne","color":"#ff8800","links":0}
+```
+
+Dans un PATCH de tag, `"color": ""` ou `null` retire la couleur ; un champ absent
+reste inchangé.
