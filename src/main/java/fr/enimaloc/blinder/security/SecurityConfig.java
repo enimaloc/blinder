@@ -1,5 +1,8 @@
 package fr.enimaloc.blinder.security;
 
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -8,9 +11,14 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.factory.PasswordEncoderFactories;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.SimpleUrlAuthenticationFailureHandler;
+import org.springframework.security.web.authentication.SimpleUrlAuthenticationSuccessHandler;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter;
+import java.io.IOException;
 
 @Configuration(proxyBeanMethods = false)
 public class SecurityConfig {
@@ -26,19 +34,38 @@ public class SecurityConfig {
 
         @Bean
         @Order(1)
-        SecurityFilterChain adminChain(HttpSecurity http, AdminRequestMatcher adminRequests) throws Exception {
+        SecurityFilterChain adminChain(HttpSecurity http, AdminRequestMatcher adminRequests,
+                                       RateLimiters rateLimiters) throws Exception {
+            RateLimiter logins = rateLimiters.adminLogin();
             http.securityMatcher(adminRequests)
+                    .addFilterBefore(new LoginRateLimitFilter(logins), UsernamePasswordAuthenticationFilter.class)
                     .authorizeHttpRequests(auth -> auth
                             .requestMatchers("/_/login", "/_/setup", "/_/admin.css", "/error").permitAll()
                             .anyRequest().hasRole("ADMIN"))
                     .formLogin(form -> form
                             .loginPage("/_/login")
-                            .defaultSuccessUrl("/_/", true)
+                            .successHandler(loginSuccess(logins))
+                            .failureHandler(new SimpleUrlAuthenticationFailureHandler("/_/login?error"))
                             .permitAll())
                     .logout(logout -> logout
                             .logoutUrl("/_/logout")
                             .logoutSuccessUrl("/_/login?logout"));
             return http.build();
+        }
+
+        /** Le succès remet le compteur à zéro ; l'échec n'enregistre rien (la tentative est déjà comptée par le filtre). */
+        private static SimpleUrlAuthenticationSuccessHandler loginSuccess(RateLimiter logins) {
+            SimpleUrlAuthenticationSuccessHandler handler = new SimpleUrlAuthenticationSuccessHandler("/_/") {
+                @Override
+                public void onAuthenticationSuccess(HttpServletRequest request, HttpServletResponse response,
+                                                    Authentication authentication)
+                        throws IOException, ServletException {
+                    logins.reset(LoginRateLimitFilter.key(request));
+                    super.onAuthenticationSuccess(request, response, authentication);
+                }
+            };
+            handler.setAlwaysUseDefaultTargetUrl(true);
+            return handler;
         }
 
         @Bean
