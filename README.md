@@ -132,7 +132,9 @@ Livraison au moins une fois : dédupliquer sur `X-Blinder-Delivery`.
 
 La résolution DNS a son propre délai de 5 s (en plus du délai de la requête) ; au-delà,
 l'essai échoue et est retenté comme tout autre échec. L'aperçu des liens borne de même
-sa résolution DNS à son délai de 3 s.
+sa résolution DNS à son délai de 3 s. Webhooks et aperçus partagent 16 résolutions DNS
+simultanées au plus : au-delà, l'essai échoue aussitôt (avertissement dans les journaux,
+au plus une fois par minute).
 
 Limite connue : des visites peuvent être perdues si la file déborde (compteur affiché
 dans les statistiques).
