@@ -91,6 +91,7 @@ public class RedirectController {
         if (!context.countable() && isAlive(decision)) {
             Optional<LinkMeta> meta = metas.forLink(link);
             if (meta.isPresent()) {
+                publishOutcome(decision, link, context, false);
                 return metaPage(request, meta.get());
             }
         }
@@ -107,18 +108,25 @@ public class RedirectController {
             }
         }
 
+        publishOutcome(decision, link, context, counted);
         return switch (decision) {
-            case Allow allow -> {
-                events.publishEvent(new LinkResolved(link.getId(), context, counted));
-                yield !context.countable() && hasUsageLimits(link) ? preview() : redirectTo(RedirectPolicy.target(link, request.getParameterMap()),
-                        RedirectPolicy.effectiveStatus(link, context.httpMethod()));
-            }
-            case Deny(DenyReason reason) -> {
-                events.publishEvent(new AccessDenied(link.getId(), reason, context));
-                yield denied(domain.get(), link, reason);
-            }
+            case Allow allow -> !context.countable() && hasUsageLimits(link)
+                    ? preview()
+                    : redirectTo(RedirectPolicy.target(link, request.getParameterMap()),
+                            RedirectPolicy.effectiveStatus(link, context.httpMethod()));
+            case Deny(DenyReason reason) -> denied(domain.get(), link, reason);
             case Challenge challenge -> passwordPage(request, challenge.rejected());
         };
+    }
+
+    /** Allow → LinkResolved ; Deny → AccessDenied ; Challenge → rien (pas encore d'issue). */
+    private void publishOutcome(AccessDecision decision, Link link, VisitContext context, boolean counted) {
+        switch (decision) {
+            case Allow allow -> events.publishEvent(new LinkResolved(link.getId(), context, counted));
+            case Deny(DenyReason reason) -> events.publishEvent(new AccessDenied(link.getId(), reason, context));
+            case Challenge challenge -> {
+            }
+        }
     }
 
     /** Lien existant et ouvert à quelqu'un : autorisé, protégé par mot de passe, ou réservé (appareils/IP). */

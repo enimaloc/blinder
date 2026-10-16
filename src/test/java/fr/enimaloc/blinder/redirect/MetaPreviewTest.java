@@ -17,6 +17,12 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.Instant;
 
+import fr.enimaloc.blinder.link.LinkRepository;
+import org.springframework.test.context.event.ApplicationEvents;
+import org.springframework.test.context.event.RecordApplicationEvents;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.not;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -28,6 +34,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest
 @AutoConfigureMockMvc
 @Import(TestData.class)
+@RecordApplicationEvents
 class MetaPreviewTest {
 
     static final String BOT = "Mozilla/5.0 (compatible; Discordbot/2.0)";
@@ -38,6 +45,10 @@ class MetaPreviewTest {
     TestData data;
     @Autowired
     PasswordEncoder encoder;
+    @Autowired
+    LinkRepository links;
+    @Autowired
+    ApplicationEvents events;
 
     Domain domain;
 
@@ -69,6 +80,17 @@ class MetaPreviewTest {
                 .andExpect(content().string(containsString("summary_large_image")))
                 .andExpect(content().string(containsString("http://go.example.com/c")))
                 .andExpect(content().string(not(containsString("secret-target"))));
+    }
+
+    @Test
+    void botMetaPagePublishesAnUncountedVisitEvent() throws Exception {
+        Link link = data.save(custom("c"));
+        mvc.perform(get("http://go.example.com/c").header("User-Agent", BOT)).andExpect(status().isOk());
+        var resolved = events.stream(LinkResolved.class).toList();
+        assertThat(resolved).hasSize(1);
+        assertThat(resolved.get(0).linkId()).isEqualTo(link.getId());
+        assertThat(resolved.get(0).counted()).isFalse();
+        assertThat(links.findById(link.getId()).orElseThrow().getUseCount()).isZero();
     }
 
     @Test
