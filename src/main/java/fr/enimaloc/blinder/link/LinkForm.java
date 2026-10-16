@@ -132,6 +132,11 @@ public class LinkForm {
         this.expiresAt = LocalDateTime.ofInstant(instant, zone);
     }
 
+    /** Au moins une alerte (déclencheur) est-elle cochée ? */
+    public boolean declaresAlerts() {
+        return notifyExhausted || notifyExpired || notifyDenials || notifyEachVisit || notifyThreshold != null;
+    }
+
     /** Le formulaire posté déclare-t-il une limite ou une protection (pour l'avertissement d'aperçu) ? */
     public boolean declaresLimitOrProtection(boolean hasExistingPassword) {
         return (newPassword != null && !newPassword.isEmpty())

@@ -28,6 +28,7 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.flash;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.model;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -191,5 +192,47 @@ class LinkNotificationAdminTest {
                 .andExpect(status().isOk())
                 .andExpect(model().attributeHasFieldErrors("form", "notifyThreshold"));
         assertThat(links.findAll()).isEmpty();
+    }
+
+    private static final String NO_CHANNEL = "aucun canal actif";
+
+    @Test
+    void createWarnsWhenAnAlertIsCheckedWithoutAnyChannel() throws Exception {
+        mvc.perform(createLink("w1").param("notifyExpired", "true"))
+                .andExpect(redirectedUrl("/_/"))
+                .andExpect(flash().attribute("warning", org.hamcrest.Matchers.containsString(NO_CHANNEL)));
+        mvc.perform(createLink("w2").param("notifyThreshold", "3"))
+                .andExpect(flash().attribute("warning", org.hamcrest.Matchers.containsString(NO_CHANNEL)));
+    }
+
+    @Test
+    void createWarnsWhenOnlyDisabledChannelsAreSelected() throws Exception {
+        NotificationChannel off = data.channel(admin, "Off", ChannelType.EMAIL, "a@example.com");
+        off.setEnabled(false);
+        channelRepo.saveAndFlush(off);
+        mvc.perform(createLink("w3").param("notifyDenials", "true").param("notifyChannelIds", off.getId().toString()))
+                .andExpect(flash().attribute("warning", org.hamcrest.Matchers.containsString(NO_CHANNEL)));
+    }
+
+    @Test
+    void noWarningWithAnActiveChannelOrWithoutAnyAlert() throws Exception {
+        NotificationChannel on = data.channel(admin, "On", ChannelType.EMAIL, "a@example.com");
+        mvc.perform(createLink("ok1").param("notifyExpired", "true").param("notifyChannelIds", on.getId().toString()))
+                .andExpect(redirectedUrl("/_/"))
+                .andExpect(flash().attributeCount(0));
+        mvc.perform(createLink("ok2")).andExpect(flash().attributeCount(0));
+    }
+
+    @Test
+    void updateWarnsWhenAnAlertIsCheckedWithoutActiveChannel() throws Exception {
+        mvc.perform(createLink("up"));
+        Link link = links.findAll().getFirst();
+        mvc.perform(post("/_/links/" + link.getId()).with(asAdmin).with(csrf())
+                        .param("domainId", domain.getId().toString()).param("slug", "up")
+                        .param("targetUrl", "https://example.com/").param("redirectStatus", "302")
+                        .param("metaMode", "NONE").param("notifyExhausted", "true")
+                        .param("version", String.valueOf(link.getVersion())))
+                .andExpect(redirectedUrl("/_/"))
+                .andExpect(flash().attribute("warning", org.hamcrest.Matchers.containsString(NO_CHANNEL)));
     }
 }
