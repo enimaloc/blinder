@@ -60,9 +60,4 @@ class RateLimitKeysTest {
         String key = RateLimitKeys.adminLogin("192.0.2.1");
         assertThat(key).startsWith("admin-login:");
     }
-
-    @Test
-    void adminLoginAggregateConstant() {
-        assertThat(RateLimitKeys.ADMIN_LOGIN_AGGREGATE).isEqualTo("admin-login");
-    }
 }

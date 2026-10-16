@@ -23,8 +23,6 @@ public class RateLimitConfig {
                 new RateLimiter(properties.linkPassword().aggregateMaxFailures(), properties.linkPassword().window(),
                         clock, MAX_KEYS),
                 new RateLimiter(properties.adminLogin().maxFailures(), properties.adminLogin().window(),
-                        clock, MAX_KEYS),
-                new RateLimiter(properties.adminLogin().aggregateMaxFailures(), properties.adminLogin().window(),
                         clock, MAX_KEYS));
     }
 

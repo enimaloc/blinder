@@ -37,22 +37,7 @@ public class RateLimiter {
 
     public synchronized boolean isBlocked(String key) {
         Deque<Instant> recent = recent(key);
-        if (recent != null && recent.size() >= maxFailures) {
-            return true;
-        }
-        // Fail-closed : si la table est saturée et tous les clés sont bloqués, refuser la clé
-        if (failures.size() >= maxKeys) {
-            // Vérifier si tous les clés restants sont bloqués
-            for (Deque<Instant> deque : failures.values()) {
-                if (deque.size() < maxFailures) {
-                    // Au moins une clé non-bloquée
-                    return false;
-                }
-            }
-            // Tous les clés sont bloqués
-            return true;
-        }
-        return false;
+        return recent != null && recent.size() >= maxFailures;
     }
 
     /** Enregistre un échec pour la clé. No-op si la clé est déjà bloquée. */
@@ -61,12 +46,8 @@ public class RateLimiter {
         if (recent == null) {
             // Nouvelle clé : essayer de la créer
             if (failures.size() >= maxKeys) {
-                // Table pleine : éviction intelligente
-                evictLeastRecentlyUsedNonBlocked();
-            }
-            // Si la table est toujours pleine après tentative, tous les clés sont bloquées : refuser la nouvelle clé
-            if (failures.size() >= maxKeys) {
-                return;
+                // Table pleine : éviction intelligente (nouvelle stratégie : purge/non-bloquée/LRU)
+                evictToMakeRoom();
             }
             recent = new ArrayDeque<>();
             failures.put(key, recent);
@@ -115,8 +96,8 @@ public class RateLimiter {
         return recent;
     }
 
-    /** Purge les clés sans entrées dans la fenêtre, puis évite les clés bloquées. */
-    private void evictLeastRecentlyUsedNonBlocked() {
+    /** Purifie et évicte pour faire room pour une nouvelle clé. Stratégie : purge-before-evict, puis non-bloquée, puis LRU. */
+    private void evictToMakeRoom() {
         // Étape 1 : purger les clés avec tous les échecs hors fenêtre
         Instant cutoff = clock.instant().minus(window);
         var keysSnapshot = java.util.List.copyOf(failures.keySet());
@@ -138,17 +119,23 @@ public class RateLimiter {
             return;
         }
 
-        // Étape 2 : éviter les clés bloquées - trouver la première clé non-bloquée et la supprimer
+        // Étape 2 : essayer d'éviter les clés bloquées - éviter la première clé non-bloquée en ordre d'accès
         var keysSnapshot2 = java.util.List.copyOf(failures.keySet());
         for (String key : keysSnapshot2) {
             Deque<Instant> deque = failures.get(key);
             if (deque != null && deque.size() < maxFailures) {
-                // Clé non-bloquée trouvée : la supprimer
+                // Clé non-bloquée trouvée : la supprimer (elle est la plus anciennement utilisée d'après l'ordre d'itération LinkedHashMap)
                 failures.remove(key);
                 return;
             }
         }
 
-        // Étape 3 : si toutes les clés sont bloquées, ne rien faire (la nouvelle clé sera refusée)
+        // Étape 3 : tous les clés sont bloqués, éviter le LRU (first in order)
+        if (!failures.isEmpty()) {
+            Iterator<String> iter = failures.keySet().iterator();
+            if (iter.hasNext()) {
+                failures.remove(iter.next());
+            }
+        }
     }
 }

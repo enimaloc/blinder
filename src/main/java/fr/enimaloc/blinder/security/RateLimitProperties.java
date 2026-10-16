@@ -19,7 +19,6 @@ public record RateLimitProperties(@DefaultValue @Valid LinkPassword linkPassword
     }
 
     public record AdminLogin(@DefaultValue("10") @Min(1) int maxFailures,
-                             @DefaultValue("15m") Duration window,
-                             @DefaultValue("50") @Min(1) int aggregateMaxFailures) {
+                             @DefaultValue("15m") Duration window) {
     }
 }

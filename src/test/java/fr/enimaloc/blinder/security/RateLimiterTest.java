@@ -69,61 +69,43 @@ class RateLimiterTest {
 
     @Test
     void recordingWhileBlockedIsNoOp() {
+        // Block a key at t0
         limiter.recordFailure("k");
         limiter.recordFailure("k");
         limiter.recordFailure("k");
         assertThat(limiter.isBlocked("k")).isTrue();
         Duration retryAfter1 = limiter.retryAfter("k");
 
+        // Advance clock 5 min, record another failure
+        clock.now = clock.now.plus(Duration.ofMinutes(5));
         limiter.recordFailure("k");
-        limiter.recordFailure("k");
-        Duration retryAfter2 = limiter.retryAfter("k");
 
-        // retryAfter doit rester constant (ne pas s'allonger)
-        assertThat(retryAfter2).isEqualTo(retryAfter1);
+        // retryAfter must stay constant (not grow to 10 min)
+        Duration retryAfter2 = limiter.retryAfter("k");
+        assertThat(retryAfter2).isEqualTo(Duration.ofMinutes(10)); // 15 - 5 = 10 min remaining
+        assertThat(retryAfter2).isLessThan(retryAfter1);
     }
 
     @Test
     void blockedKeySurvivesFloodOfNonBlockedKeys() {
-        // Bloquer une clé
+        // (a) Block one key
         for (int i = 0; i < 3; i++) {
             limiter.recordFailure("blocked");
         }
         assertThat(limiter.isBlocked("blocked")).isTrue();
 
-        // Envoyer un flot de clés non-bloquées
+        // Send a flood of non-blocked keys
         for (int i = 0; i < 10; i++) {
             limiter.recordFailure("flood" + i);
         }
 
-        // La clé bloquée doit survivre
+        // Blocked key must survive
         assertThat(limiter.isBlocked("blocked")).isTrue();
     }
 
     @Test
     void expiredKeyIsPurgedBeforeEviction() {
-        // Enregistrer une clé avec un seul échec
-        limiter.recordFailure("old");
-        clock.now = clock.now.plus(Duration.ofMinutes(16)); // Sortir de la fenêtre
-
-        // Bloquer une autre clé
-        for (int i = 0; i < 3; i++) {
-            limiter.recordFailure("blocked");
-        }
-
-        // Ajouter une troisième clé
-        limiter.recordFailure("new");
-
-        // L'ancienne clé devrait être purgée
-        assertThat(limiter.isBlocked("old")).isFalse();
-        assertThat(limiter.retryAfter("old")).isEqualTo(Duration.ZERO);
-        // Les clés bloquées et nouvelles doivent exister
-        assertThat(limiter.isBlocked("blocked")).isTrue();
-    }
-
-    @Test
-    void whenEveryKeyIsBlockedNewKeyReportsBlocked() {
-        // Bloquer les deux premières clés
+        // (b) Fill table with all-blocked keys
         for (int i = 0; i < 3; i++) {
             limiter.recordFailure("a");
         }
@@ -133,9 +115,34 @@ class RateLimiterTest {
         assertThat(limiter.isBlocked("a")).isTrue();
         assertThat(limiter.isBlocked("b")).isTrue();
 
-        // Essayer d'ajouter une nouvelle clé : elle doit être refusée (et reportée comme bloquée)
+        // Advance clock past window
+        clock.now = clock.now.plus(Duration.ofMinutes(16));
+
+        // Record failure on new key → old keys purged, new is tracked and not blocked
+        limiter.recordFailure("new");
+        assertThat(limiter.isBlocked("new")).isFalse();
+        assertThat(limiter.isBlocked("a")).isFalse();
+        assertThat(limiter.isBlocked("b")).isFalse();
+    }
+
+    @Test
+    void whenEveryKeyIsBlockedEvictsLruBlocked() {
+        // (c) Fill table with all-blocked keys
+        for (int i = 0; i < 3; i++) {
+            limiter.recordFailure("a");
+        }
+        for (int i = 0; i < 3; i++) {
+            limiter.recordFailure("b");
+        }
+        assertThat(limiter.isBlocked("a")).isTrue();
+        assertThat(limiter.isBlocked("b")).isTrue();
+
+        // Record failure on new key → evicts LRU (blocked) key
         limiter.recordFailure("c");
-        assertThat(limiter.isBlocked("c")).isTrue();
+        assertThat(limiter.isBlocked("c")).isFalse();
+        // "a" was the least recently used, so it should be evicted
+        assertThat(limiter.isBlocked("a")).isFalse();
+        assertThat(limiter.isBlocked("b")).isTrue();
     }
 
     @Test
