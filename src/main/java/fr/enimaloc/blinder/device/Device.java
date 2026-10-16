@@ -30,12 +30,14 @@ public class Device extends BaseEntity {
     @Column(nullable = false, length = 64)
     private String name;
 
+    @Column(updatable = false)
     private Instant lastSeenAt;
 
     /** Empreinte du ticket de synchronisation en cours ; modifiée uniquement par requêtes atomiques. */
-    @Column(length = 64)
+    @Column(length = 64, updatable = false)
     private String syncTicketHash;
 
+    @Column(updatable = false)
     private Instant syncExpiresAt;
 
     public Device(User owner, String name) {

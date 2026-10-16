@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="fr" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{admin/fragments :: head('Enrôler un appareil')}"></head>
+<body>
+<nav th:replace="~{admin/fragments :: nav}"></nav>
+<main>
+    <h1>Enrôler un appareil</h1>
+    <p th:if="${domains.isEmpty()}" class="notice">Ajoutez d'abord un <a th:href="@{/_/domains/new}">domaine</a> actif.</p>
+    <form th:object="${form}" th:action="@{/_/devices}" method="post">
+        <label for="name">Nom de l'appareil</label>
+        <input id="name" th:field="*{name}" maxlength="64" required>
+        <p class="error" th:errors="*{name}"></p>
+        <label for="startDomainId">Domaine où ouvrir le lien d'enrôlement</label>
+        <select id="startDomainId" th:field="*{startDomainId}">
+            <option th:each="d : ${domains}" th:value="${d.id}" th:text="${d.host}"></option>
+        </select>
+        <p class="error" th:errors="*{startDomainId}"></p>
+        <p><button type="submit">Générer le lien</button></p>
+    </form>
+</main>
+</body>
+</html>

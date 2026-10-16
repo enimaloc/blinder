@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<html lang="fr" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{admin/fragments :: head('Lien d’enrôlement')}"></head>
+<body>
+<nav th:replace="~{admin/fragments :: nav}"></nav>
+<main>
+    <h1>Lien d'enrôlement</h1>
+    <p>Ouvrez ce lien sur l'appareil « <span th:text="${name}"></span> » dans les 15 minutes.
+        Il n'est affiché qu'une seule fois.</p>
+    <p><code th:text="${enrollmentUrl}"></code></p>
+    <p><a th:href="@{/_/devices}">Retour aux appareils</a></p>
+</main>
+</body>
+</html>

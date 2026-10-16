@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="fr" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{admin/fragments :: head('Appareils')}"></head>
+<body>
+<nav th:replace="~{admin/fragments :: nav}"></nav>
+<main>
+    <h1>Appareils autorisés</h1>
+    <p class="error" th:if="${error}" th:text="${error}"></p>
+    <p><a th:href="@{/_/devices/new}">Enrôler un appareil</a></p>
+    <p class="notice">Un appareil est reconnu sur tous vos domaines actifs. Après l'ajout d'un domaine,
+        ouvrez /_/device/resync depuis l'appareil. Safari peut effacer les cookies des domaines visités
+        uniquement par redirection : la resynchronisation les recrée.</p>
+    <table>
+        <tr><th>Nom</th><th>Domaines</th><th>Dernière utilisation</th><th></th></tr>
+        <tr th:each="row : ${devices}">
+            <td>
+                <form class="inline" method="post" th:action="@{/_/devices/{id}/rename(id=${row.device().id})}">
+                    <input name="name" th:value="${row.device().name}" maxlength="64" required>
+                    <button type="submit">Renommer</button>
+                </form>
+            </td>
+            <td th:text="${row.domainCount()}"></td>
+            <td th:text="${row.device().lastSeenAt} ?: 'jamais'"></td>
+            <td>
+                <form class="inline" method="post" th:action="@{/_/devices/{id}/revoke(id=${row.device().id})}">
+                    <button class="danger" type="submit">Révoquer</button>
+                </form>
+            </td>
+        </tr>
+    </table>
+    <h2 th:unless="${pending.isEmpty()}">Enrôlements en attente</h2>
+    <table th:unless="${pending.isEmpty()}">
+        <tr><th>Nom</th><th>Domaine</th><th>Expire</th><th></th></tr>
+        <tr th:each="e : ${pending}">
+            <td th:text="${e.name}"></td>
+            <td th:text="${e.startDomain.host}"></td>
+            <td th:text="${e.expiresAt}"></td>
+            <td>
+                <form class="inline" method="post" th:action="@{/_/devices/enrollments/{id}/cancel(id=${e.id})}">
+                    <button type="submit">Annuler</button>
+                </form>
+            </td>
+        </tr>
+    </table>
+</main>
+</body>
+</html>
