@@ -238,6 +238,22 @@ public class LinkService {
         links.delete(get(owner, id));
     }
 
+    /**
+     * Relecture après une violation d'intégrité : le slug demandé est-il effectivement pris par un autre lien du
+     * domaine ? {@code false} si le slug est vide (généré) ou le domaine inconnu : la violation a une autre cause.
+     */
+    @Transactional(readOnly = true)
+    public boolean slugTaken(User owner, UUID domainId, String rawSlug, UUID currentId) {
+        if (domainId == null || rawSlug == null || rawSlug.isBlank()) {
+            return false;
+        }
+        String slug = slugs.normalize(rawSlug);
+        return domains.findByIdAndOwner(domainId, owner)
+                .flatMap(domain -> links.findByDomainAndSlug(domain, slug))
+                .filter(existing -> !existing.getId().equals(currentId))
+                .isPresent();
+    }
+
     private Domain ownedDomain(User owner, UUID domainId) {
         return domains.findByIdAndOwner(domainId, owner)
                 .orElseThrow(() -> new FieldErrorException("domainId", "Domaine inconnu"));

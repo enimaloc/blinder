@@ -112,8 +112,7 @@ public class LinkAdminController {
             binding.rejectValue(e.field(), "invalid", e.getMessage());
             return "admin/links/form";
         } catch (DataIntegrityViolationException e) {
-            binding.rejectValue("slug", "duplicate", "Ce slug existe déjà sur ce domaine");
-            return "admin/links/form";
+            return integrity(owner, form, null, binding, model);
         }
         return "redirect:/_/";
     }
@@ -154,10 +153,19 @@ public class LinkAdminController {
             model.addAttribute("staleError", true);
             return "admin/links/form";
         } catch (DataIntegrityViolationException e) {
-            binding.rejectValue("slug", "duplicate", "Ce slug existe déjà sur ce domaine");
-            return "admin/links/form";
+            return integrity(owner, form, id, binding, model);
         }
         return "redirect:/_/";
+    }
+
+    /** « Slug pris » seulement si c'est le cas (relecture) ; sinon une erreur d'enregistrement sans champ. */
+    private String integrity(User owner, LinkForm form, UUID currentId, BindingResult binding, Model model) {
+        if (links.slugTaken(owner, form.getDomainId(), form.getSlug(), currentId)) {
+            binding.rejectValue("slug", "duplicate", "Ce slug existe déjà sur ce domaine");
+        } else {
+            model.addAttribute("conflictError", true);
+        }
+        return "admin/links/form";
     }
 
     @PostMapping("/links/{id}/reset")

@@ -9,6 +9,7 @@
                                        th:text="${status.label()}"></span>
         <span th:text="'Utilisations : ' + ${useCount}"></span></p>
     <p class="error" th:if="${staleError}">Ce lien a été modifié entre-temps, rechargez la page.</p>
+    <p class="error" th:if="${conflictError}">Conflit d'enregistrement, réessayez.</p>
     <form th:object="${form}" method="post"
           th:action="${linkId == null} ? @{/_/links} : @{/_/links/{id}(id=${linkId})}">
         <input type="hidden" th:field="*{version}">
