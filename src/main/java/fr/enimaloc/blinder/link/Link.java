@@ -8,6 +8,8 @@ import fr.enimaloc.blinder.user.User;
 import jakarta.persistence.Column;
 import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.JoinTable;
@@ -90,6 +92,31 @@ public class Link extends BaseEntity {
             joinColumns = @JoinColumn(name = "link_id"),
             inverseJoinColumns = @JoinColumn(name = "device_id"))
     private Set<Device> devices = new HashSet<>();
+
+    @Column(nullable = false)
+    private int redirectStatus = 302;
+
+    @Column(nullable = false)
+    private boolean forwardQuery;
+
+    @Column(nullable = false)
+    private boolean interstitial;
+
+    @Column(nullable = false)
+    private int interstitialSeconds;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 16)
+    private MetaMode metaMode = MetaMode.NONE;
+
+    @Column(length = 200)
+    private String metaTitle;
+
+    @Column(length = 500)
+    private String metaDescription;
+
+    @Column(length = 2048)
+    private String metaImageUrl;
 
     public Link(Domain domain, String slug, String targetUrl, User owner) {
         this.domain = domain;

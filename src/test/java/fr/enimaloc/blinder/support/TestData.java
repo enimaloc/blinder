@@ -11,6 +11,9 @@ import fr.enimaloc.blinder.domain.Domain;
 import fr.enimaloc.blinder.domain.DomainRepository;
 import fr.enimaloc.blinder.link.Link;
 import fr.enimaloc.blinder.link.LinkRepository;
+import fr.enimaloc.blinder.link.preview.LinkPreview;
+import fr.enimaloc.blinder.link.preview.LinkPreviewRepository;
+import fr.enimaloc.blinder.link.preview.PreviewStatus;
 import fr.enimaloc.blinder.user.Role;
 import fr.enimaloc.blinder.user.User;
 import fr.enimaloc.blinder.user.UserRepository;
@@ -32,9 +35,11 @@ public class TestData {
     private final DeviceRepository devices;
     private final DeviceCredentialRepository deviceCredentials;
     private final DeviceEnrollmentRepository deviceEnrollments;
+    private final LinkPreviewRepository linkPreviews;
     private final TransactionTemplate transactions;
 
     public void reset() {
+        linkPreviews.deleteAllInBatch();
         deviceCredentials.deleteAllInBatch();
         deviceEnrollments.deleteAllInBatch();
         links.deleteAllInBatch();
@@ -83,5 +88,15 @@ public class TestData {
             managed.getDevices().add(devices.getReferenceById(device.getId()));
             managed.setDeviceProtected(true);
         });
+    }
+
+    public LinkPreview preview(Link link, String title, String description, String imageUrl, PreviewStatus status) {
+        LinkPreview preview = new LinkPreview(links.getReferenceById(link.getId()));
+        preview.setTitle(title);
+        preview.setDescription(description);
+        preview.setImageUrl(imageUrl);
+        preview.setStatus(status);
+        preview.setFetchedAt(Instant.now());
+        return linkPreviews.saveAndFlush(preview);
     }
 }

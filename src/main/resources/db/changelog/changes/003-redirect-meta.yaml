@@ -1,0 +1,48 @@
+databaseChangeLog:
+  - changeSet:
+      id: 003-redirect-meta
+      author: blinder
+      dbms: "!sqlite"
+      changes:
+        - addColumn:
+            tableName: links
+            columns:
+              - column: { name: redirect_status, type: int, defaultValueNumeric: 302, constraints: { nullable: false } }
+              - column: { name: forward_query, type: boolean, defaultValueBoolean: false, constraints: { nullable: false } }
+              - column: { name: interstitial, type: boolean, defaultValueBoolean: false, constraints: { nullable: false } }
+              - column: { name: interstitial_seconds, type: int, defaultValueNumeric: 0, constraints: { nullable: false } }
+              - column: { name: meta_mode, type: varchar(16), defaultValue: NONE, constraints: { nullable: false } }
+              - column: { name: meta_title, type: varchar(200) }
+              - column: { name: meta_description, type: varchar(500) }
+              - column: { name: meta_image_url, type: varchar(2048) }
+  - changeSet:
+      id: 003-redirect-meta-sqlite
+      author: blinder
+      dbms: sqlite
+      changes:
+        # addColumn NOT NULL force Liquibase a reconstruire la table sous SQLite, ce qui casse la FK link_devices.
+        - sql: ALTER TABLE links ADD COLUMN redirect_status INTEGER NOT NULL DEFAULT 302
+        - sql: ALTER TABLE links ADD COLUMN forward_query BOOLEAN NOT NULL DEFAULT 0
+        - sql: ALTER TABLE links ADD COLUMN interstitial BOOLEAN NOT NULL DEFAULT 0
+        - sql: ALTER TABLE links ADD COLUMN interstitial_seconds INTEGER NOT NULL DEFAULT 0
+        - sql: ALTER TABLE links ADD COLUMN meta_mode VARCHAR(16) NOT NULL DEFAULT 'NONE'
+        - sql: ALTER TABLE links ADD COLUMN meta_title VARCHAR(200)
+        - sql: ALTER TABLE links ADD COLUMN meta_description VARCHAR(500)
+        - sql: ALTER TABLE links ADD COLUMN meta_image_url VARCHAR(2048)
+  - changeSet:
+      id: 003-redirect-meta-previews
+      author: blinder
+      changes:
+        - createTable:
+            tableName: link_previews
+            columns:
+              - column: { name: id, type: char(36), constraints: { primaryKey: true, nullable: false } }
+              - column: { name: created_at, type: "${timestamp.type}", constraints: { nullable: false } }
+              - column: { name: updated_at, type: "${timestamp.type}", constraints: { nullable: false } }
+              - column: { name: version, type: bigint, constraints: { nullable: false } }
+              - column: { name: link_id, type: char(36), constraints: { nullable: false, unique: true, uniqueConstraintName: uk_link_previews_link, foreignKeyName: fk_link_previews_link, references: links(id), deleteCascade: true } }
+              - column: { name: title, type: varchar(200) }
+              - column: { name: description, type: varchar(500) }
+              - column: { name: image_url, type: varchar(2048) }
+              - column: { name: fetched_at, type: "${timestamp.type}", constraints: { nullable: false } }
+              - column: { name: status, type: varchar(16), constraints: { nullable: false } }
