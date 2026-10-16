@@ -84,7 +84,9 @@ public class LinkService {
             throw new StaleEditException();
         }
         Domain domain = ownedDomain(owner, form.getDomainId());
-        link.setSlug(resolveSlug(domain, form.getSlug(), id));
+        // Slug vide à l'édition : on conserve l'actuel (revalidé : unicité sur le domaine cible).
+        String requested = form.getSlug() == null || form.getSlug().isBlank() ? link.getSlug() : form.getSlug();
+        link.setSlug(resolveSlug(domain, requested, id));
         link.setDomain(domain);
         apply(link, form);
         return links.saveAndFlush(link);

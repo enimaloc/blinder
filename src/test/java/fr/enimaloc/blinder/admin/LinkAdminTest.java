@@ -136,6 +136,24 @@ class LinkAdminTest {
     }
 
     @Test
+    void updateWithBlankSlugKeepsCurrentSlug() throws Exception {
+        Link link = data.link(domain, "promo", "https://example.com");
+
+        mvc.perform(post("/_/links/{id}", link.getId()).with(asAdmin).with(csrf())
+                        .param("domainId", domain.getId().toString())
+                        .param("slug", "")
+                        .param("targetUrl", "https://example.com/new")
+                        .param("enabled", "true")
+                        .param("version", String.valueOf(link.getVersion())))
+                .andExpect(redirectedUrl("/_/"));
+
+        Link found = links.findById(link.getId()).orElseThrow();
+        assertThat(found.getSlug()).isEqualTo("promo");
+        assertThat(found.getTargetUrl()).isEqualTo("https://example.com/new");
+        mvc.perform(get("http://go.example.com/promo")).andExpect(status().isFound());
+    }
+
+    @Test
     void updateDetectsStaleVersion() throws Exception {
         Link link = data.link(domain, "promo", "https://example.com");
         long staleVersion = link.getVersion();
