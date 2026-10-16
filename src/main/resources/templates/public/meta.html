@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="fr" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="utf-8">
+    <meta name="robots" content="noindex">
+    <title th:text="${meta.title() != null} ? ${meta.title()} : 'Lien'">Lien</title>
+    <meta property="og:type" content="website">
+    <meta property="og:url" th:content="${pageUrl}">
+    <meta property="og:title" th:if="${meta.title() != null}" th:content="${meta.title()}">
+    <meta property="og:description" th:if="${meta.description() != null}" th:content="${meta.description()}">
+    <meta property="og:image" th:if="${meta.imageUrl() != null}" th:content="${meta.imageUrl()}">
+    <meta name="twitter:card" th:content="${meta.imageUrl() != null} ? 'summary_large_image' : 'summary'">
+    <meta name="twitter:title" th:if="${meta.title() != null}" th:content="${meta.title()}">
+    <meta name="twitter:description" th:if="${meta.description() != null}" th:content="${meta.description()}">
+    <meta name="twitter:image" th:if="${meta.imageUrl() != null}" th:content="${meta.imageUrl()}">
+</head>
+<body>
+<main>
+    <h1 th:text="${meta.title() != null} ? ${meta.title()} : 'Lien'">Lien</h1>
+    <p th:if="${meta.description() != null}" th:text="${meta.description()}"></p>
+</main>
+</body>
+</html>

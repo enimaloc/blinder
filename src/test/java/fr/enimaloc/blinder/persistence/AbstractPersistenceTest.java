@@ -9,6 +9,9 @@ import fr.enimaloc.blinder.domain.Domain;
 import fr.enimaloc.blinder.link.Link;
 import fr.enimaloc.blinder.link.LinkRepository;
 import fr.enimaloc.blinder.link.LinkService;
+import fr.enimaloc.blinder.link.MetaMode;
+import fr.enimaloc.blinder.link.preview.LinkPreviewRepository;
+import fr.enimaloc.blinder.link.preview.PreviewStatus;
 import fr.enimaloc.blinder.link.UsageCounter;
 import fr.enimaloc.blinder.support.TestData;
 import fr.enimaloc.blinder.user.User;
@@ -54,6 +57,8 @@ abstract class AbstractPersistenceTest {
     DeviceCredentialRepository credentials;
     @Autowired
     DeviceEnrollmentRepository enrollments;
+    @Autowired
+    LinkPreviewRepository previews;
 
     @Autowired
     PlatformTransactionManager transactionManager;
@@ -333,5 +338,51 @@ abstract class AbstractPersistenceTest {
         data.credential(device, domain);
         assertThatThrownBy(() -> data.credential(device, domain))
                 .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
+    }
+
+    @Test
+    void roundTripsRedirectAndMetaFields() {
+        Link link = new Link(domain, "opts", "https://example.com", owner);
+        link.setRedirectStatus(307);
+        link.setForwardQuery(true);
+        link.setInterstitial(true);
+        link.setInterstitialSeconds(5);
+        link.setMetaMode(MetaMode.CUSTOM);
+        link.setMetaTitle("Titre");
+        link.setMetaDescription("Description");
+        link.setMetaImageUrl("https://example.com/i.png");
+        data.save(link);
+
+        Link found = links.findById(link.getId()).orElseThrow();
+        assertThat(found.getRedirectStatus()).isEqualTo(307);
+        assertThat(found.isForwardQuery()).isTrue();
+        assertThat(found.isInterstitial()).isTrue();
+        assertThat(found.getInterstitialSeconds()).isEqualTo(5);
+        assertThat(found.getMetaMode()).isEqualTo(MetaMode.CUSTOM);
+        assertThat(found.getMetaTitle()).isEqualTo("Titre");
+        assertThat(found.getMetaDescription()).isEqualTo("Description");
+        assertThat(found.getMetaImageUrl()).isEqualTo("https://example.com/i.png");
+    }
+
+    @Test
+    void newLinksHaveRedirectDefaults() {
+        Link found = links.findById(data.link(domain, "plain", "https://example.com").getId()).orElseThrow();
+        assertThat(found.getRedirectStatus()).isEqualTo(302);
+        assertThat(found.isForwardQuery()).isFalse();
+        assertThat(found.isInterstitial()).isFalse();
+        assertThat(found.getMetaMode()).isEqualTo(MetaMode.NONE);
+    }
+
+    @Test
+    void previewIsUniquePerLinkAndCascadesOnDelete() {
+        Link link = data.link(domain, "prev", "https://example.com");
+        data.preview(link, "T", "D", "https://example.com/i.png", PreviewStatus.OK);
+        assertThat(previews.findByLinkId(link.getId())).get()
+                .satisfies(p -> assertThat(p.getTitle()).isEqualTo("T"));
+        assertThatThrownBy(() -> data.preview(link, "T2", null, null, PreviewStatus.OK))
+                .isInstanceOf(DataIntegrityViolationException.class);
+
+        links.deleteById(link.getId());
+        assertThat(previews.findByLinkId(link.getId())).isEmpty();
     }
 }

@@ -56,11 +56,56 @@
             </label>
             <p class="error" th:errors="*{deviceIds}"></p>
         </fieldset>
+        <fieldset>
+            <legend>Redirection</legend>
+            <label for="redirectStatus">Code HTTP</label>
+            <select id="redirectStatus" th:field="*{redirectStatus}">
+                <option value="302">302 — temporaire (défaut)</option>
+                <option value="307">307 — temporaire, méthode conservée</option>
+                <option value="301">301 — permanent (lien sans limite ni protection)</option>
+                <option value="308">308 — permanent, méthode conservée (lien sans limite ni protection)</option>
+            </select>
+            <p class="error" th:errors="*{redirectStatus}"></p>
+            <label><input type="checkbox" th:field="*{forwardQuery}"> Transmettre les paramètres de requête (la cible gagne en cas de conflit)</label>
+            <label><input type="checkbox" th:field="*{interstitial}"> Page intermédiaire de confirmation</label>
+            <label for="interstitialSeconds">Redirection automatique après (secondes, 0 = bouton seul)</label>
+            <input id="interstitialSeconds" type="number" min="0" max="60" th:field="*{interstitialSeconds}">
+            <p class="error" th:errors="*{interstitialSeconds}"></p>
+        </fieldset>
+        <fieldset>
+            <legend>Aperçu (Discord, Slack…)</legend>
+            <label for="metaMode">Source</label>
+            <select id="metaMode" th:field="*{metaMode}">
+                <option value="NONE">Aucun</option>
+                <option value="CUSTOM">Personnalisé</option>
+                <option value="PASSTHROUGH">Repris de la cible</option>
+            </select>
+            <p class="notice">« Repris de la cible » : l'aperçu de la cible (titre, description, image — donc son domaine) sera visible par toute personne ou tout bot qui ouvre ce lien, même sans y avoir accès.</p>
+            <p class="notice" th:if="${limitedOrProtected and form.metaMode != null and form.metaMode.name() == 'PASSTHROUGH'}">Ce lien est limité ou protégé : son aperçu repris de la cible est pourtant visible publiquement.</p>
+            <label for="metaTitle">Titre (personnalisé)</label>
+            <input id="metaTitle" th:field="*{metaTitle}" maxlength="200">
+            <p class="error" th:errors="*{metaTitle}"></p>
+            <label for="metaDescription">Description (personnalisée)</label>
+            <textarea id="metaDescription" rows="2" th:field="*{metaDescription}" maxlength="500"></textarea>
+            <p class="error" th:errors="*{metaDescription}"></p>
+            <label for="metaImageUrl">Image (URL, personnalisée)</label>
+            <input id="metaImageUrl" type="url" th:field="*{metaImageUrl}">
+            <p class="error" th:errors="*{metaImageUrl}"></p>
+            <p class="notice" th:if="${preview != null}">
+                Dernier aperçu repris :
+                <strong th:text="${preview.status.name() == 'OK'} ? 'réussi' : 'échec'">réussi</strong>
+                <span th:if="${previewFetchedAt != null}" th:text="'le ' + ${previewFetchedAt}"></span>
+                — <span th:text="${preview.title} ?: '(sans titre)'"></span>
+            </p>
+        </fieldset>
         <p><button type="submit">Enregistrer</button></p>
     </form>
     <th:block th:if="${linkId != null}">
         <form class="inline" th:action="@{/_/links/{id}/reset(id=${linkId})}" method="post">
             <button type="submit">Réinitialiser le compteur</button>
+        </form>
+        <form class="inline" th:if="${form.metaMode != null and form.metaMode.name() == 'PASSTHROUGH'}" th:action="@{/_/links/{id}/preview/refresh(id=${linkId})}" method="post">
+            <button type="submit">Rafraîchir l'aperçu</button>
         </form>
         <form class="inline" th:action="@{/_/links/{id}/delete(id=${linkId})}" method="post">
             <button class="danger" type="submit">Supprimer</button>

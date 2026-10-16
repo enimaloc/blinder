@@ -65,4 +65,38 @@ public class LinkForm {
     private boolean deviceProtected;
 
     private Set<UUID> deviceIds = new LinkedHashSet<>();
+
+    @NotNull
+    private Integer redirectStatus = 302;
+
+    private boolean forwardQuery;
+
+    private boolean interstitial;
+
+    @Min(0)
+    @Max(60)
+    private int interstitialSeconds;
+
+    @NotNull
+    private MetaMode metaMode = MetaMode.NONE;
+
+    @Size(max = 200)
+    private String metaTitle;
+
+    @Size(max = 500)
+    private String metaDescription;
+
+    @Size(max = 2048)
+    private String metaImageUrl;
+
+    /** Le formulaire posté déclare-t-il une limite ou une protection (pour l'avertissement d'aperçu) ? */
+    public boolean declaresLimitOrProtection(boolean hasExistingPassword) {
+        return (newPassword != null && !newPassword.isEmpty())
+                || (hasExistingPassword && !removePassword)
+                || (ipAllowlist != null && !ipAllowlist.isBlank())
+                || deviceProtected
+                || (deviceIds != null && !deviceIds.isEmpty())
+                || maxUses != null
+                || ttlMinutes != null;
+    }
 }

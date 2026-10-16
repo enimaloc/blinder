@@ -1,6 +1,7 @@
 package fr.enimaloc.blinder.admin;
 
 import fr.enimaloc.blinder.access.LinkStatusResolver;
+import fr.enimaloc.blinder.common.BlinderProperties;
 import fr.enimaloc.blinder.common.FieldErrorException;
 import fr.enimaloc.blinder.device.DeviceService;
 import fr.enimaloc.blinder.domain.Domain;
@@ -8,15 +9,19 @@ import fr.enimaloc.blinder.domain.DomainService;
 import fr.enimaloc.blinder.link.Link;
 import fr.enimaloc.blinder.link.LinkForm;
 import fr.enimaloc.blinder.link.LinkService;
+import fr.enimaloc.blinder.link.preview.LinkPreviewService;
 import fr.enimaloc.blinder.common.StaleEditException;
 import fr.enimaloc.blinder.user.CurrentUser;
 import fr.enimaloc.blinder.user.User;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
+import org.springframework.web.servlet.mvc.support.RedirectAttributes;
+import fr.enimaloc.blinder.link.MetaMode;
 import org.springframework.validation.BindingResult;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
@@ -25,19 +30,25 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.UUID;
 
+@Slf4j
 @Controller
 @RequestMapping("/_")
 @RequiredArgsConstructor
 public class LinkAdminController {
+
+    private static final DateTimeFormatter PREVIEW_DATE = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
 
     private final CurrentUser currentUser;
     private final LinkService links;
     private final DomainService domains;
     private final LinkStatusResolver statuses;
     private final DeviceService deviceService;
+    private final LinkPreviewService previews;
+    private final BlinderProperties properties;
 
     @GetMapping("/")
     public String list(@RequestParam(name = "domain", required = false) UUID domainId, Model model) {
@@ -63,20 +74,25 @@ public class LinkAdminController {
         model.addAttribute("domains", owned);
         model.addAttribute("devices", deviceService.all(owner));
         model.addAttribute("hasPassword", false);
+        model.addAttribute("limitedOrProtected", false);
         return "admin/links/form";
     }
 
     @PostMapping("/links")
-    public String create(@Valid @ModelAttribute("form") LinkForm form, BindingResult binding, Model model) {
+    public String create(@Valid @ModelAttribute("form") LinkForm form, BindingResult binding, Model model,
+                         RedirectAttributes flash) {
         User owner = currentUser.require();
         model.addAttribute("domains", domains.list(owner));
         model.addAttribute("devices", deviceService.all(owner));
         model.addAttribute("hasPassword", false);
+        model.addAttribute("limitedOrProtected", form.declaresLimitOrProtection(false));
         if (binding.hasErrors()) {
             return "admin/links/form";
         }
         try {
-            links.create(owner, form);
+            Link created = links.create(owner, form);
+            warnIfExposed(flash, created);
+            refreshPreviewQuietly(owner, created);
         } catch (FieldErrorException e) {
             binding.rejectValue(e.field(), "invalid", e.getMessage());
             return "admin/links/form";
@@ -98,14 +114,24 @@ public class LinkAdminController {
 
     @PostMapping("/links/{id}")
     public String update(@PathVariable UUID id, @Valid @ModelAttribute("form") LinkForm form,
-                         BindingResult binding, Model model) {
+                         BindingResult binding, Model model,
+                         RedirectAttributes flash) {
         User owner = currentUser.require();
-        populateEdit(model, owner, links.get(owner, id));
+        Link current = links.get(owner, id);
+        populateEdit(model, owner, current);
+        model.addAttribute("limitedOrProtected", form.declaresLimitOrProtection(current.getPasswordHash() != null));
         if (binding.hasErrors()) {
             return "admin/links/form";
         }
         try {
-            links.update(owner, id, form);
+            // `current` vient d'un chargement distinct de celui de update() (open-in-view désactivé)
+            String previousTarget = current.getTargetUrl();
+            Link updated = links.update(owner, id, form);
+            warnIfExposed(flash, updated);
+            if (!previousTarget.equals(updated.getTargetUrl())) {
+                previews.discard(id);
+            }
+            refreshPreviewQuietly(owner, updated);
         } catch (FieldErrorException e) {
             binding.rejectValue(e.field(), "invalid", e.getMessage());
             return "admin/links/form";
@@ -125,6 +151,12 @@ public class LinkAdminController {
         return "redirect:/_/links/" + id;
     }
 
+    @PostMapping("/links/{id}/preview/refresh")
+    public String refreshPreview(@PathVariable UUID id) {
+        previews.refresh(currentUser.require(), id);
+        return "redirect:/_/links/" + id;
+    }
+
     @PostMapping("/links/{id}/delete")
     public String delete(@PathVariable UUID id) {
         links.delete(currentUser.require(), id);
@@ -140,5 +172,29 @@ public class LinkAdminController {
         model.addAttribute("devices", deviceService.all(owner));
         model.addAttribute("hasPassword", link.getPasswordHash() != null);
         model.addAttribute("noDeviceLeft", links.hasNoDeviceLeft(link));
+        model.addAttribute("limitedOrProtected", LinkService.isLimitedOrProtected(link));
+        var preview = previews.current(link.getId()).orElse(null);
+        model.addAttribute("preview", preview);
+        model.addAttribute("previewFetchedAt", preview == null || preview.getFetchedAt() == null ? null
+                : PREVIEW_DATE.format(preview.getFetchedAt().atZone(properties.admin().timeZone())));
+    }
+
+    /** Le lien est déjà enregistré : un échec de l'aperçu ne doit jamais faire échouer l'enregistrement. */
+    private void refreshPreviewQuietly(User owner, Link saved) {
+        if (saved.getMetaMode() != MetaMode.PASSTHROUGH) {
+            return;
+        }
+        try {
+            previews.refresh(owner, saved.getId());
+        } catch (RuntimeException e) {
+            log.warn("Preview refresh failed for link {}", saved.getId(), e);
+        }
+    }
+
+    private static void warnIfExposed(RedirectAttributes flash, Link saved) {
+        if (saved.getMetaMode() == MetaMode.PASSTHROUGH && LinkService.isLimitedOrProtected(saved)) {
+            flash.addFlashAttribute("warning", "Aperçu repris de la cible sur un lien limité ou protégé : "
+                    + "son titre, sa description et son image sont visibles publiquement.");
+        }
     }
 }

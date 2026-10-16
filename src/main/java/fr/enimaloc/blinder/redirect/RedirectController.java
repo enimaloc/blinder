@@ -27,6 +27,7 @@ import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.servlet.ModelAndView;
 import org.springframework.web.servlet.view.RedirectView;
 
+import java.net.URI;
 import java.time.Duration;
 import java.util.Optional;
 
@@ -42,6 +43,7 @@ public class RedirectController {
     private final VisitContextFactory contexts;
     private final ApplicationEventPublisher events;
     private final LinkPasswordThrottle throttle;
+    private final LinkMetaResolver metas;
 
     @RequestMapping(value = "/{slug}", method = {RequestMethod.GET, RequestMethod.HEAD, RequestMethod.POST})
     public ModelAndView redirect(@PathVariable String slug, HttpServletRequest request, HttpServletResponse response) {
@@ -86,6 +88,18 @@ public class RedirectController {
             }
         }
 
+        if (!context.countable() && isAlive(decision)) {
+            Optional<LinkMeta> meta = metas.forLink(link);
+            if (meta.isPresent()) {
+                publishOutcome(decision, link, context, false);
+                return metaPage(request, meta.get());
+            }
+        }
+
+        if (decision instanceof Allow && context.countable() && showsInterstitial(link, context)) {
+            return interstitial(request, link);
+        }
+
         boolean counted = false;
         if (decision instanceof Allow && context.countable()) {
             counted = usageCounter.consume(link, context.now());
@@ -94,17 +108,56 @@ public class RedirectController {
             }
         }
 
+        publishOutcome(decision, link, context, counted);
         return switch (decision) {
-            case Allow allow -> {
-                events.publishEvent(new LinkResolved(link.getId(), context, counted));
-                yield !context.countable() && hasUsageLimits(link) ? preview() : redirectTo(link.getTargetUrl());
-            }
-            case Deny(DenyReason reason) -> {
-                events.publishEvent(new AccessDenied(link.getId(), reason, context));
-                yield denied(domain.get(), link, reason);
-            }
+            case Allow allow -> !context.countable() && hasUsageLimits(link)
+                    ? preview()
+                    : redirectTo(RedirectPolicy.target(link, request.getParameterMap()),
+                            RedirectPolicy.effectiveStatus(link, context.httpMethod()));
+            case Deny(DenyReason reason) -> denied(domain.get(), link, reason);
             case Challenge challenge -> passwordPage(request, challenge.rejected());
         };
+    }
+
+    /** Allow → LinkResolved ; Deny → AccessDenied ; Challenge → rien (pas encore d'issue). */
+    private void publishOutcome(AccessDecision decision, Link link, VisitContext context, boolean counted) {
+        switch (decision) {
+            case Allow allow -> events.publishEvent(new LinkResolved(link.getId(), context, counted));
+            case Deny(DenyReason reason) -> events.publishEvent(new AccessDenied(link.getId(), reason, context));
+            case Challenge challenge -> {
+            }
+        }
+    }
+
+    /** Lien existant et ouvert à quelqu'un : autorisé, protégé par mot de passe, ou réservé (appareils/IP). */
+    private static boolean isAlive(AccessDecision decision) {
+        return decision instanceof Allow || decision instanceof Challenge
+                || decision instanceof Deny deny && deny.reason() == DenyReason.FORBIDDEN;
+    }
+
+    private static ModelAndView metaPage(HttpServletRequest request, LinkMeta meta) {
+        ModelAndView mv = new ModelAndView("public/meta");
+        mv.addObject("meta", meta);
+        mv.addObject("pageUrl", request.getRequestURL().toString());
+        mv.setStatus(HttpStatus.OK);
+        return mv;
+    }
+
+    /** Page intermédiaire : GET comptable, lien sans mot de passe (le formulaire de mot de passe confirme déjà). */
+    private static boolean showsInterstitial(Link link, VisitContext context) {
+        return link.isInterstitial() && link.getPasswordHash() == null && "GET".equals(context.httpMethod());
+    }
+
+    /** N'affiche l'URL complète que si le lien n'a pas de limite d'usage (sinon elle contournerait le compteur). */
+    private static ModelAndView interstitial(HttpServletRequest request, Link link) {
+        String query = request.getQueryString();
+        ModelAndView mv = new ModelAndView("public/interstitial");
+        mv.addObject("action", request.getRequestURI() + (query == null ? "" : "?" + query));
+        mv.addObject("targetHost", URI.create(link.getTargetUrl()).getHost());
+        mv.addObject("targetUrl", hasUsageLimits(link) ? null : link.getTargetUrl());
+        mv.addObject("seconds", link.getInterstitialSeconds());
+        mv.setStatus(HttpStatus.OK);
+        return mv;
     }
 
     private ModelAndView denied(Domain domain, Link link, DenyReason reason) {
@@ -134,7 +187,8 @@ public class RedirectController {
     /** Formulaire de mot de passe : la cible n'apparaît jamais dans le modèle. */
     private static ModelAndView passwordPage(HttpServletRequest request, boolean rejected) {
         ModelAndView mv = new ModelAndView("public/password");
-        mv.addObject("action", request.getRequestURI());
+        String query = RedirectPolicy.withoutParameters(request.getQueryString(), RedirectPolicy.NEVER_FORWARDED);
+        mv.addObject("action", request.getRequestURI() + (query == null ? "" : "?" + query));
         mv.addObject("rejected", rejected);
         mv.setStatus(HttpStatus.OK);
         return mv;
@@ -160,9 +214,14 @@ public class RedirectController {
     }
 
     private static ModelAndView redirectTo(String url) {
+        return redirectTo(url, HttpStatus.FOUND);
+    }
+
+    private static ModelAndView redirectTo(String url, HttpStatus status) {
         RedirectView view = new RedirectView(url);
-        view.setStatusCode(HttpStatus.FOUND);
+        view.setStatusCode(status);
         view.setExposeModelAttributes(false);
+        view.setExpandUriTemplateVariables(false);
         return new ModelAndView(view);
     }
 }

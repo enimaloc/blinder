@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="fr" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="robots" content="noindex">
+    <title>Redirection</title>
+</head>
+<body>
+<main>
+    <h1>Vous allez être redirigé</h1>
+    <p>Destination : <strong th:text="${targetHost}">exemple.org</strong></p>
+    <p th:if="${targetUrl != null}"><code th:text="${targetUrl}">https://exemple.org/</code></p>
+    <form id="continue" method="post" th:action="${action}">
+        <button type="submit">Continuer</button>
+    </form>
+    <p th:if="${seconds > 0}">Redirection automatique dans <span id="countdown" data-remaining th:text="${seconds}">5</span> s.</p>
+    <script th:inline="javascript" data-once>
+        (function () {
+            var seconds = /*[[${seconds}]]*/ 0;
+            var form = document.getElementById('continue');
+            var button = form.querySelector('button');
+            var sent = false;
+            var timer = null;
+            function lock() {
+                sent = true;
+                button.disabled = true;
+                if (timer !== null) {
+                    clearInterval(timer);
+                    timer = null;
+                }
+            }
+            form.addEventListener('submit', function (event) {
+                if (sent) {
+                    event.preventDefault();
+                } else {
+                    lock();
+                }
+            });
+            window.addEventListener('pageshow', function (event) {
+                if (event.persisted) {
+                    sent = false;
+                    button.disabled = false;
+                }
+            });
+            if (seconds > 0) {
+                var remaining = seconds;
+                var label = document.querySelector('[data-remaining]');
+                timer = setInterval(function () {
+                    remaining -= 1;
+                    label.textContent = remaining;
+                    if (remaining <= 0 && !sent) {
+                        lock();
+                        form.submit();
+                    }
+                }, 1000);
+            }
+        })();
+    </script>
+</main>
+</body>
+</html>

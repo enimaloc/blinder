@@ -106,9 +106,47 @@ class PasswordProtectionTest {
     @Test
     void rightPasswordInFormRedirectsAndCounts() throws Exception {
         mvc.perform(post("http://go.example.com/secret").with(csrf()).param("password", "open-sesame"))
-                .andExpect(status().isFound())
+                .andExpect(status().isSeeOther())
                 .andExpect(redirectedUrl(TARGET));
         assertThat(useCount()).isEqualTo(1);
+    }
+
+    @Test
+    void passwordPostOnTemporaryLinkIsSeeOtherWithoutPasswordInLocation() throws Exception {
+        link.setRedirectStatus(307);
+        link.setForwardQuery(true);
+        data.save(link);
+        mvc.perform(post("http://go.example.com/secret").with(csrf()).param("password", "open-sesame"))
+                .andExpect(status().isSeeOther())
+                .andExpect(header().string("Location", not(containsString("password"))));
+    }
+
+    @Test
+    void passwordFormKeepsTheForwardedQueryButNotTheAttempt() throws Exception {
+        link.setForwardQuery(true);
+        data.save(link);
+        mvc.perform(get("http://go.example.com/secret?utm=1&pw=wrong"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("action=\"/secret?utm=1\"")))
+                .andExpect(content().string(not(containsString("pw="))));
+        mvc.perform(post("http://go.example.com/secret?utm=1").with(csrf()).param("password", "open-sesame"))
+                .andExpect(status().isSeeOther())
+                .andExpect(redirectedUrl(TARGET + "?utm=1"));
+    }
+
+    @Test
+    void passwordFormActionStripsEveryCredentialParameter() throws Exception {
+        link.setForwardQuery(true);
+        data.save(link);
+        mvc.perform(get("http://go.example.com/secret?utm=1&password=x&_csrf=y&pw=z"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("action=\"/secret?utm=1\"")))
+                .andExpect(content().string(not(containsString("password=x"))))
+                .andExpect(content().string(not(containsString("_csrf=y"))))
+                .andExpect(content().string(not(containsString("pw=z"))));
+        mvc.perform(post("http://go.example.com/secret?utm=1").with(csrf()).param("password", "open-sesame"))
+                .andExpect(status().isSeeOther())
+                .andExpect(redirectedUrl(TARGET + "?utm=1"));
     }
 
     @Test
