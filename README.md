@@ -372,7 +372,8 @@ curl -X PATCH -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/js
   -d '{"targetUrl":"https://example.com/v2"}' "$BLINDER/links/$LINK_ID"
 ```
 
-Si `version` est fourni et diffère de la version courante : 409. Seul un
+Si `version` est fourni et diffère de la version courante : 409. Toute modification
+du lien, de ses tags ou de ses réglages de notification change la version. Seul un
 changement qui les concerne réarme les alertes (voir « Notifications »).
 
 - `DELETE /links/{id}` : 204, supprime le lien et ses visites.
