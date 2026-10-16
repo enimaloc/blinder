@@ -84,6 +84,7 @@ public class LinkService {
         form.setDeniedUrl(link.getDeniedUrl());
         form.setVersion(link.getVersion());
         form.setIpAllowlist(link.getIpAllowlist() == null ? null : link.getIpAllowlist().replace(",", "\n"));
+        form.setDeviceProtected(link.isDeviceProtected());
         form.setDeviceIds(new LinkedHashSet<>(links.findDeviceIds(link.getId())));
         return form;
     }
@@ -196,7 +197,7 @@ public class LinkService {
         }
         link.getDevices().clear();
         link.getDevices().addAll(owned);
-        link.setDeviceProtected(!owned.isEmpty());
+        link.setDeviceProtected(form.isDeviceProtected() || !owned.isEmpty());
     }
 
     private Instant toInstant(LocalDateTime local) {

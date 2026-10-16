@@ -61,5 +61,8 @@ public class LinkForm {
     @Size(max = 4000)
     private String ipAllowlist;
 
+    /** Réserver aux appareils autorisés (reste coché même si plus aucun appareil ne subsiste). */
+    private boolean deviceProtected;
+
     private Set<UUID> deviceIds = new LinkedHashSet<>();
 }

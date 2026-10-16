@@ -29,6 +29,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.model;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -171,5 +172,52 @@ class LinkProtectionAdminTest {
                         .param("version", String.valueOf(created.getVersion())))
                 .andExpect(redirectedUrl("/_/"));
         assertThat(link("temp").isDeviceProtected()).isFalse();
+    }
+
+    MockHttpServletRequestBuilder edit(Link link, String target) {
+        return post("/_/links/{id}", link.getId()).with(asAdmin).with(csrf())
+                .param("domainId", domain.getId().toString())
+                .param("slug", link.getSlug())
+                .param("targetUrl", target)
+                .param("enabled", "true")
+                .param("version", String.valueOf(links.findById(link.getId()).orElseThrow().getVersion()));
+    }
+
+    @Test
+    void editingARevokedDeviceLinkKeepsItClosed() throws Exception {
+        Device laptop = data.device(admin, "Laptop");
+        Link secret = data.link(domain, "secret", "https://example.com/secret");
+        data.allowDevice(secret, laptop);
+        deviceService.revoke(admin, laptop.getId());
+
+        mvc.perform(get("/_/links/{id}", secret.getId()).with(asAdmin))
+                .andExpect(content().string(containsString("name=\"deviceProtected\"")));
+        mvc.perform(edit(secret, "https://example.com/new").param("deviceProtected", "true"))
+                .andExpect(redirectedUrl("/_/"));
+
+        assertThat(link("secret").isDeviceProtected()).isTrue();
+        mvc.perform(get("http://go.example.com/secret")).andExpect(status().isNotFound());
+    }
+
+    @Test
+    void explicitlyUntickingTheBoxWithNoDeviceMakesTheLinkPublic() throws Exception {
+        Device laptop = data.device(admin, "Laptop");
+        Link secret = data.link(domain, "open", "https://example.com/open");
+        data.allowDevice(secret, laptop);
+        deviceService.revoke(admin, laptop.getId());
+
+        mvc.perform(edit(secret, "https://example.com/open").param("_deviceProtected", "on"))
+                .andExpect(redirectedUrl("/_/"));
+
+        assertThat(link("open").isDeviceProtected()).isFalse();
+        mvc.perform(get("http://go.example.com/open")).andExpect(status().isFound());
+    }
+
+    @Test
+    void tickedDeviceSetsTheFlagEvenWithoutTheBox() throws Exception {
+        Device laptop = data.device(admin, "Laptop");
+        mvc.perform(create("dev").param("deviceIds", laptop.getId().toString()))
+                .andExpect(redirectedUrl("/_/"));
+        assertThat(link("dev").isDeviceProtected()).isTrue();
     }
 }
