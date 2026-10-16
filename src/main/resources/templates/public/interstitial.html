@@ -14,23 +14,49 @@
     <form id="continue" method="post" th:action="${action}">
         <button type="submit">Continuer</button>
     </form>
-    <th:block th:if="${seconds > 0}">
-        <p>Redirection automatique dans <span id="countdown" th:text="${seconds}">5</span> s.</p>
-        <script th:inline="javascript">
-            (function () {
-                var remaining = /*[[${seconds}]]*/ 5;
-                var label = document.getElementById('countdown');
-                var timer = setInterval(function () {
+    <p th:if="${seconds > 0}">Redirection automatique dans <span id="countdown" data-remaining th:text="${seconds}">5</span> s.</p>
+    <script th:inline="javascript" data-once>
+        (function () {
+            var seconds = /*[[${seconds}]]*/ 0;
+            var form = document.getElementById('continue');
+            var button = form.querySelector('button');
+            var sent = false;
+            var timer = null;
+            function lock() {
+                sent = true;
+                button.disabled = true;
+                if (timer !== null) {
+                    clearInterval(timer);
+                    timer = null;
+                }
+            }
+            form.addEventListener('submit', function (event) {
+                if (sent) {
+                    event.preventDefault();
+                } else {
+                    lock();
+                }
+            });
+            window.addEventListener('pageshow', function (event) {
+                if (event.persisted) {
+                    sent = false;
+                    button.disabled = false;
+                }
+            });
+            if (seconds > 0) {
+                var remaining = seconds;
+                var label = document.querySelector('[data-remaining]');
+                timer = setInterval(function () {
                     remaining -= 1;
                     label.textContent = remaining;
-                    if (remaining <= 0) {
-                        clearInterval(timer);
-                        document.getElementById('continue').submit();
+                    if (remaining <= 0 && !sent) {
+                        lock();
+                        form.submit();
                     }
                 }, 1000);
-            })();
-        </script>
-    </th:block>
+            }
+        })();
+    </script>
 </main>
 </body>
 </html>

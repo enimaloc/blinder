@@ -157,4 +157,15 @@ class InterstitialTest {
         mvc.perform(get("http://go.example.com/plain"))
                 .andExpect(status().isTemporaryRedirect());
     }
+
+    @Test
+    void doubleSubmitGuardIsRenderedWithAndWithoutCountdown() throws Exception {
+        data.save(interstitial("zero", "https://dest.example.org/p", 0));
+        data.save(interstitial("five", "https://dest.example.org/p", 5));
+        for (String slug : new String[]{"zero", "five"}) {
+            mvc.perform(get("http://go.example.com/" + slug))
+                    .andExpect(content().string(containsString("data-once")))
+                    .andExpect(content().string(containsString("pageshow")));
+        }
+    }
 }
