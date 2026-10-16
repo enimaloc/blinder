@@ -21,11 +21,13 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.context.request.WebRequest;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
+import tools.jackson.core.JacksonException;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.TreeMap;
 
 /** Erreurs de l'API au format Problem Details (RFC 9457), messages en français comme le panel. */
 @RestControllerAdvice(basePackages = "fr.enimaloc.blinder.api")
@@ -35,10 +37,22 @@ public class ApiProblems extends ResponseEntityExceptionHandler {
     static final String INVALID = "Données invalides";
     static final String STALE = "Modifié entre-temps";
     static final String CONFLICT = "Conflit avec une donnée existante";
+    static final String UNREADABLE = "Corps de requête illisible";
 
     @ExceptionHandler(FieldErrorException.class)
     ProblemDetail fieldError(FieldErrorException e) {
         return invalid(Map.of(e.field(), e.getMessage()));
+    }
+
+    @ExceptionHandler(InvalidFieldsException.class)
+    ProblemDetail invalidFields(InvalidFieldsException e) {
+        return invalid(new TreeMap<>(e.errors()));
+    }
+
+    /** Erreur de liaison JSON hors convertisseur MVC (fusion d'un PATCH). */
+    @ExceptionHandler(JacksonException.class)
+    ProblemDetail unreadable() {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, UNREADABLE);
     }
 
     @ExceptionHandler(ResponseStatusException.class)
@@ -74,7 +88,7 @@ public class ApiProblems extends ResponseEntityExceptionHandler {
                                                                   HttpHeaders headers, HttpStatusCode status,
                                                                   WebRequest request) {
         return ResponseEntity.badRequest()
-                .body(ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Corps de requête illisible"));
+                .body(ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, UNREADABLE));
     }
 
     static ProblemDetail invalid(Map<String, String> errors) {

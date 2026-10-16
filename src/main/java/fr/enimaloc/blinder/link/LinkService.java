@@ -15,6 +15,13 @@ import fr.enimaloc.blinder.redirect.RedirectPolicy;
 import fr.enimaloc.blinder.tag.Tag;
 import fr.enimaloc.blinder.tag.TagRepository;
 import fr.enimaloc.blinder.user.User;
+import jakarta.persistence.criteria.Predicate;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -26,17 +33,24 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Service
 public class LinkService {
 
     private static final int SLUG_ATTEMPTS = 5;
+    private static final char LIKE_ESCAPE = '\\';
+    private static final Sort SEARCH_ORDER = Sort.by(Sort.Order.desc("createdAt"), Sort.Order.asc("id"));
 
     private final LinkRepository links;
     private final DomainRepository domains;
@@ -73,6 +87,57 @@ public class LinkService {
         }
         return domain == null ? links.findAllByOwnerOrderByCreatedAtDesc(owner)
                 : links.findAllByOwnerAndDomainOrderByCreatedAtDesc(owner, domain);
+    }
+
+    /**
+     * Liste paginée, plus récents d'abord ({@code createdAt desc, id}) ; le tri de {@code pageable} est ignoré.
+     *
+     * @param domainId filtre optionnel (domaine d'un autre propriétaire : 404)
+     * @param tagId    filtre optionnel (tag d'un autre propriétaire : 404)
+     * @param q        filtre optionnel, sans casse, sur le slug ou l'URL cible ({@code %} et {@code _} littéraux)
+     */
+    @Transactional(readOnly = true)
+    public Page<Link> search(User owner, UUID domainId, UUID tagId, String q, Pageable pageable) {
+        Domain domain = domainId == null ? null : domains.findByIdAndOwner(domainId, owner)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+        Tag tag = tagId == null ? null : tags.findByIdAndOwner(tagId, owner)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+        String pattern = q == null || q.isBlank() ? null : "%" + escapeLike(q.trim().toLowerCase(Locale.ROOT)) + "%";
+        Specification<Link> spec = (root, query, cb) -> {
+            List<Predicate> where = new ArrayList<>();
+            where.add(cb.equal(root.get("owner"), owner));
+            if (domain != null) {
+                where.add(cb.equal(root.get("domain"), domain));
+            }
+            if (tag != null) {
+                where.add(cb.isMember(tag, root.get("tags")));
+            }
+            if (pattern != null) {
+                where.add(cb.or(cb.like(cb.lower(root.get("slug")), pattern, LIKE_ESCAPE),
+                        cb.like(cb.lower(root.get("targetUrl")), pattern, LIKE_ESCAPE)));
+            }
+            return cb.and(where.toArray(Predicate[]::new));
+        };
+        Pageable sorted = PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), SEARCH_ORDER);
+        Page<Link> page = links.findAll(spec, sorted);
+        if (page.isEmpty()) {
+            return page;
+        }
+        List<UUID> ids = page.getContent().stream().map(Link::getId).toList();
+        Map<UUID, Link> loaded = links.findAllByIdIn(ids).stream()
+                .collect(Collectors.toMap(Link::getId, Function.identity()));
+        return new PageImpl<>(ids.stream().map(loaded::get).filter(Objects::nonNull).toList(), sorted,
+                page.getTotalElements());
+    }
+
+    static String escapeLike(String value) {
+        return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
+    }
+
+    /** Appareils autorisés du lien. */
+    @Transactional(readOnly = true)
+    public List<UUID> deviceIds(UUID linkId) {
+        return links.findDeviceIds(linkId);
     }
 
     @Transactional(readOnly = true)
