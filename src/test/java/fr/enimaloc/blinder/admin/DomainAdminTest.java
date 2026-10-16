@@ -124,4 +124,40 @@ class DomainAdminTest {
                 .andExpect(redirectedUrl("/_/domains"));
         assertThat(domains.findById(empty.getId())).isEmpty();
     }
+
+    @Test
+    void staleVersionIsRejectedAndDomainUnchanged() throws Exception {
+        Domain domain = data.domain("go.example.com", admin);
+        mvc.perform(post("/_/domains/{id}", domain.getId()).with(asAdmin).with(csrf())
+                        .param("host", "go.example.com")
+                        .param("enabled", "true")
+                        .param("notFoundUrl", "https://example.com/404")
+                        .param("version", String.valueOf(domain.getVersion() + 5)))
+                .andExpect(status().isOk())
+                .andExpect(model().attribute("staleError", true));
+        assertThat(domains.findById(domain.getId()).orElseThrow().getNotFoundUrl()).isNull();
+    }
+
+    @Test
+    void otherOwnersDomainCannotBeUpdatedOrDeleted() throws Exception {
+        Domain theirs = data.domain("theirs.example.com", data.admin("other"));
+        mvc.perform(post("/_/domains/{id}", theirs.getId()).with(asAdmin).with(csrf())
+                        .param("host", "hijack.example.com").param("enabled", "true"))
+                .andExpect(status().isNotFound());
+        mvc.perform(post("/_/domains/{id}/delete", theirs.getId()).with(asAdmin).with(csrf()))
+                .andExpect(status().isNotFound());
+        assertThat(domains.findById(theirs.getId()).orElseThrow().getHost()).isEqualTo("theirs.example.com");
+    }
+
+    @Test
+    void renamingToAnExistingHostIsRejected() throws Exception {
+        data.domain("taken.example.com", admin);
+        Domain domain = data.domain("go.example.com", admin);
+        mvc.perform(post("/_/domains/{id}", domain.getId()).with(asAdmin).with(csrf())
+                        .param("host", "taken.example.com").param("enabled", "true")
+                        .param("version", String.valueOf(domain.getVersion())))
+                .andExpect(status().isOk())
+                .andExpect(model().attributeHasFieldErrors("form", "host"));
+        assertThat(domains.findById(domain.getId()).orElseThrow().getHost()).isEqualTo("go.example.com");
+    }
 }

@@ -6,6 +6,8 @@ import fr.enimaloc.blinder.common.StaleEditException;
 import fr.enimaloc.blinder.domain.DomainService;
 import fr.enimaloc.blinder.user.CurrentUser;
 import jakarta.validation.Valid;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -49,6 +51,9 @@ public class DomainAdminController {
         } catch (FieldErrorException e) {
             binding.rejectValue(e.field(), "invalid", e.getMessage());
             return "admin/domains/form";
+        } catch (DataIntegrityViolationException e) {
+            binding.rejectValue("host", "duplicate", "Ce domaine est déjà déclaré");
+            return "admin/domains/form";
         }
         return "redirect:/_/domains";
     }
@@ -72,8 +77,11 @@ public class DomainAdminController {
         } catch (FieldErrorException e) {
             binding.rejectValue(e.field(), "invalid", e.getMessage());
             return "admin/domains/form";
-        } catch (StaleEditException e) {
+        } catch (StaleEditException | ObjectOptimisticLockingFailureException e) {
             model.addAttribute("staleError", true);
+            return "admin/domains/form";
+        } catch (DataIntegrityViolationException e) {
+            binding.rejectValue("host", "duplicate", "Ce domaine est déjà déclaré");
             return "admin/domains/form";
         }
         return "redirect:/_/domains";
@@ -81,7 +89,11 @@ public class DomainAdminController {
 
     @PostMapping("/{id}/delete")
     public String delete(@PathVariable UUID id, RedirectAttributes redirect) {
-        if (!domains.delete(currentUser.require(), id)) {
+        try {
+            if (!domains.delete(currentUser.require(), id)) {
+                redirect.addFlashAttribute("error", "Ce domaine contient encore des liens.");
+            }
+        } catch (DataIntegrityViolationException e) {
             redirect.addFlashAttribute("error", "Ce domaine contient encore des liens.");
         }
         return "redirect:/_/domains";
