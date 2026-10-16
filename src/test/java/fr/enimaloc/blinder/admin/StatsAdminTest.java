@@ -170,6 +170,16 @@ class StatsAdminTest {
     }
 
     @Test
+    void tagCsvFileNameIsTransliteratedAndCarriesTheUtf8Name() throws Exception {
+        fr.enimaloc.blinder.tag.Tag ete = data.tag(admin, "Été 2026");
+        String header = mvc.perform(get("/_/stats.csv").param("tag", ete.getId().toString()).with(login(admin)))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getHeader("Content-Disposition");
+        assertThat(header).matches("attachment; filename=\"blinder-stats-tag-Ete_2026-\\d{4}-\\d{2}-\\d{2}\\.csv\";"
+                + " filename\\*=UTF-8''blinder-stats-tag-%C3%89t%C3%A9%202026-\\d{4}-\\d{2}-\\d{2}\\.csv");
+    }
+
+    @Test
     void foreignOrUnknownTagIs404() throws Exception {
         fr.enimaloc.blinder.tag.Tag theirs = data.tag(data.admin("other"), "promo");
         mvc.perform(get("/_/stats").param("tag", theirs.getId().toString()).with(login(admin)))

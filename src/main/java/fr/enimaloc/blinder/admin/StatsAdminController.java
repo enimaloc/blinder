@@ -22,6 +22,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.text.Normalizer;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.util.LinkedHashMap;
@@ -105,11 +107,27 @@ public class StatsAdminController {
     private void csv(User owner, StatsScope scope, String name, StatsPeriod period, HttpServletResponse response)
             throws IOException {
         // Les slugs sont validés à la saisie ; on assainit quand même pour l'en-tête.
-        String safe = name.replaceAll("[^A-Za-z0-9._-]", "_");
+        String date = LocalDate.now(clock.withZone(blinder.admin().timeZone())).toString();
+        String ascii = Normalizer.normalize(name, Normalizer.Form.NFD).replaceAll("\\p{M}+", "")
+                .replaceAll("[^A-Za-z0-9._-]", "_");
         response.setContentType("text/csv; charset=UTF-8");
         response.setCharacterEncoding("UTF-8");
-        response.setHeader("Content-Disposition",
-                "attachment; filename=\"blinder-stats-" + safe + "-" + LocalDate.now(clock.withZone(blinder.admin().timeZone())) + ".csv\"");
+        response.setHeader("Content-Disposition", "attachment; filename=\"blinder-stats-" + ascii + "-" + date
+                + ".csv\"; filename*=UTF-8''" + rfc5987("blinder-stats-" + name + "-" + date + ".csv"));
         query.exportCsv(owner, scope, period, response.getWriter());
+    }
+
+    /** Encodage RFC 5987 (pourcentage UTF-8) ; seuls les {@code attr-char} restent littéraux. */
+    private static String rfc5987(String value) {
+        StringBuilder out = new StringBuilder();
+        for (byte b : value.getBytes(StandardCharsets.UTF_8)) {
+            char c = (char) (b & 0xFF);
+            if (c < 0x80 && (Character.isLetterOrDigit(c) || "!#$&+-.^_`|~".indexOf(c) >= 0)) {
+                out.append(c);
+            } else {
+                out.append('%').append(String.format("%02X", b & 0xFF));
+            }
+        }
+        return out.toString();
     }
 }
