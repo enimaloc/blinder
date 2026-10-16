@@ -14,10 +14,12 @@ public record RateLimitProperties(@DefaultValue @Valid LinkPassword linkPassword
                                   @DefaultValue @Valid AdminLogin adminLogin) {
 
     public record LinkPassword(@DefaultValue("5") @Min(1) int maxFailures,
-                               @DefaultValue("15m") Duration window) {
+                               @DefaultValue("15m") Duration window,
+                               @DefaultValue("50") @Min(1) int aggregateMaxFailures) {
     }
 
     public record AdminLogin(@DefaultValue("10") @Min(1) int maxFailures,
-                             @DefaultValue("15m") Duration window) {
+                             @DefaultValue("15m") Duration window,
+                             @DefaultValue("50") @Min(1) int aggregateMaxFailures) {
     }
 }

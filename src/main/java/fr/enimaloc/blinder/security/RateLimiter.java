@@ -7,8 +7,10 @@ import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
+import java.util.List;
 
-/** Compteur d'échecs en mémoire, fenêtre glissante, nombre de clés borné (éviction LRU). Instance unique. */
+/** Compteur d'échecs en mémoire, fenêtre glissante, nombre de clés borné (éviction LRU).
+ * Sous un flot de clés bloquées, les nouvelles clés sont refusées plutôt que de laisser les anciens blocages expirer prématurément. */
 public class RateLimiter {
 
     private final int maxFailures;
@@ -18,6 +20,15 @@ public class RateLimiter {
     private final LinkedHashMap<String, Deque<Instant>> failures = new LinkedHashMap<>(16, 0.75f, true);
 
     public RateLimiter(int maxFailures, Duration window, Clock clock, int maxKeys) {
+        if (maxFailures < 1) {
+            throw new IllegalArgumentException("maxFailures must be >= 1, got " + maxFailures);
+        }
+        if (window == null || window.isNegative() || window.isZero()) {
+            throw new IllegalArgumentException("window must be strictly positive, got " + window);
+        }
+        if (maxKeys < 1) {
+            throw new IllegalArgumentException("maxKeys must be >= 1, got " + maxKeys);
+        }
         this.maxFailures = maxFailures;
         this.window = window;
         this.clock = clock;
@@ -26,17 +37,42 @@ public class RateLimiter {
 
     public synchronized boolean isBlocked(String key) {
         Deque<Instant> recent = recent(key);
-        return recent != null && recent.size() >= maxFailures;
+        if (recent != null && recent.size() >= maxFailures) {
+            return true;
+        }
+        // Fail-closed : si la table est saturée et tous les clés sont bloqués, refuser la clé
+        if (failures.size() >= maxKeys) {
+            // Vérifier si tous les clés restants sont bloqués
+            for (Deque<Instant> deque : failures.values()) {
+                if (deque.size() < maxFailures) {
+                    // Au moins une clé non-bloquée
+                    return false;
+                }
+            }
+            // Tous les clés sont bloqués
+            return true;
+        }
+        return false;
     }
 
+    /** Enregistre un échec pour la clé. No-op si la clé est déjà bloquée. */
     public synchronized void recordFailure(String key) {
         Deque<Instant> recent = recent(key);
         if (recent == null) {
+            // Nouvelle clé : essayer de la créer
             if (failures.size() >= maxKeys) {
-                evictLeastRecentlyUsed();
+                // Table pleine : éviction intelligente
+                evictLeastRecentlyUsedNonBlocked();
+            }
+            // Si la table est toujours pleine après tentative, tous les clés sont bloquées : refuser la nouvelle clé
+            if (failures.size() >= maxKeys) {
+                return;
             }
             recent = new ArrayDeque<>();
             failures.put(key, recent);
+        } else if (recent.size() >= maxFailures) {
+            // Clé déjà bloquée : no-op
+            return;
         }
         recent.addLast(clock.instant());
         while (recent.size() > maxFailures) {
@@ -79,11 +115,40 @@ public class RateLimiter {
         return recent;
     }
 
-    private void evictLeastRecentlyUsed() {
-        Iterator<String> eldest = failures.keySet().iterator();
-        if (eldest.hasNext()) {
-            eldest.next();
-            eldest.remove();
+    /** Purge les clés sans entrées dans la fenêtre, puis évite les clés bloquées. */
+    private void evictLeastRecentlyUsedNonBlocked() {
+        // Étape 1 : purger les clés avec tous les échecs hors fenêtre
+        Instant cutoff = clock.instant().minus(window);
+        var keysSnapshot = java.util.List.copyOf(failures.keySet());
+        for (String key : keysSnapshot) {
+            Deque<Instant> deque = failures.get(key);
+            if (deque != null) {
+                // Nettoyer les entrées hors fenêtre
+                while (!deque.isEmpty() && !deque.peekFirst().isAfter(cutoff)) {
+                    deque.removeFirst();
+                }
+                if (deque.isEmpty()) {
+                    failures.remove(key);
+                }
+            }
         }
+
+        // Si la table n'est pas encore pleine, on est bon
+        if (failures.size() < maxKeys) {
+            return;
+        }
+
+        // Étape 2 : éviter les clés bloquées - trouver la première clé non-bloquée et la supprimer
+        var keysSnapshot2 = java.util.List.copyOf(failures.keySet());
+        for (String key : keysSnapshot2) {
+            Deque<Instant> deque = failures.get(key);
+            if (deque != null && deque.size() < maxFailures) {
+                // Clé non-bloquée trouvée : la supprimer
+                failures.remove(key);
+                return;
+            }
+        }
+
+        // Étape 3 : si toutes les clés sont bloquées, ne rien faire (la nouvelle clé sera refusée)
     }
 }
