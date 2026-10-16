@@ -53,14 +53,16 @@ public class Link extends BaseEntity {
     @Column(name = "ttl_after_first_use_seconds")
     private Duration ttlAfterFirstUse;
 
+    /** Écrit uniquement à l'insertion : ensuite {@link LinkRepository} (consume / resetUsage). */
     @OptimisticLock(excluded = true)
+    @Column(updatable = false)
     private Instant firstUsedAt;
 
     private Integer maxUses;
 
-    /** Modifié en production uniquement par {@link UsageCounter} (UPDATE atomique) ou un reset admin. */
+    /** Modifié en production uniquement par {@link UsageCounter} (UPDATE atomique) ou {@link LinkRepository#resetUsage}; jamais écrit par un UPDATE d'entité. */
     @OptimisticLock(excluded = true)
-    @Column(nullable = false)
+    @Column(nullable = false, updatable = false)
     private int useCount;
 
     @Column(length = 2048)

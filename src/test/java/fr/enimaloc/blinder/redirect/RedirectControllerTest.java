@@ -171,7 +171,7 @@ class RedirectControllerTest {
 
     @Test
     void ttlAfterFirstUseExpires() throws Exception {
-        Link link = data.link(domain, "ttl", "https://example.com");
+        Link link = new Link(domain, "ttl", "https://example.com", domain.getOwner());
         link.setTtlAfterFirstUse(Duration.ofMinutes(10));
         link.setFirstUsedAt(NOW.minus(Duration.ofMinutes(10)));
         data.save(link);

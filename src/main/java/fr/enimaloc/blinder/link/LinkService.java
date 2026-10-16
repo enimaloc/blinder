@@ -92,10 +92,7 @@ public class LinkService {
 
     @Transactional
     public void resetUsage(User owner, UUID id) {
-        Link link = get(owner, id);
-        link.setUseCount(0);
-        link.setFirstUsedAt(null);
-        links.save(link);
+        links.resetUsage(get(owner, id).getId());
     }
 
     @Transactional

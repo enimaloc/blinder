@@ -18,4 +18,9 @@ class SqlitePersistenceTest extends AbstractPersistenceTest {
         registry.add("spring.datasource.url",
                 () -> "jdbc:sqlite:" + file + "?journal_mode=WAL&foreign_keys=true");
     }
+
+    @Override
+    boolean supportsOverlappingTransactions() {
+        return false;
+    }
 }

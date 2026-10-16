@@ -45,4 +45,8 @@ public interface LinkRepository extends JpaRepository<Link, UUID> {
                and (l.maxUses is null or l.useCount < l.maxUses)
             """)
     int consume(@Param("id") UUID id, @Param("now") Instant now);
+
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("update Link l set l.useCount = 0, l.firstUsedAt = null where l.id = :id")
+    int resetUsage(@Param("id") UUID id);
 }

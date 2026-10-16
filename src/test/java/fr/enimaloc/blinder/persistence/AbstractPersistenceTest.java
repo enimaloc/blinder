@@ -3,6 +3,7 @@ package fr.enimaloc.blinder.persistence;
 import fr.enimaloc.blinder.domain.Domain;
 import fr.enimaloc.blinder.link.Link;
 import fr.enimaloc.blinder.link.LinkRepository;
+import fr.enimaloc.blinder.link.LinkService;
 import fr.enimaloc.blinder.link.UsageCounter;
 import fr.enimaloc.blinder.support.TestData;
 import fr.enimaloc.blinder.user.User;
@@ -12,6 +13,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -39,6 +42,12 @@ abstract class AbstractPersistenceTest {
 
     @Autowired
     UsageCounter usageCounter;
+
+    @Autowired
+    PlatformTransactionManager transactionManager;
+
+    @Autowired
+    LinkService linkService;
 
     User owner;
     Domain domain;
@@ -157,5 +166,71 @@ abstract class AbstractPersistenceTest {
 
         assertThat(successes).isEqualTo(1);
         assertThat(links.findById(link.getId()).orElseThrow().getUseCount()).isEqualTo(1);
+    }
+
+    /** SQLite runs with a single pooled connection, so two transactions can never overlap there. */
+    boolean supportsOverlappingTransactions() {
+        return true;
+    }
+
+    @Test
+    void detachedEntitySaveDoesNotOverwriteCountedUsage() {
+        Link created = new Link(domain, "stale", "https://example.com/a", owner);
+        created.setMaxUses(1);
+        data.save(created);
+        Link detached = links.findById(created.getId()).orElseThrow();
+        assertThat(usageCounter.consume(created, Instant.now())).isTrue();
+
+        detached.setTargetUrl("https://example.com/b");
+        links.saveAndFlush(detached);
+
+        Link found = links.findById(created.getId()).orElseThrow();
+        assertThat(found.getTargetUrl()).isEqualTo("https://example.com/b");
+        assertThat(found.getUseCount()).isEqualTo(1);
+        assertThat(found.getFirstUsedAt()).isNotNull();
+    }
+
+    @Test
+    void entityUpdateDoesNotOverwriteConcurrentlyCountedUsage() throws Exception {
+        org.junit.jupiter.api.Assumptions.assumeTrue(supportsOverlappingTransactions());
+        Link created = new Link(domain, "race", "https://example.com/a", owner);
+        created.setMaxUses(1);
+        data.save(created);
+        TransactionTemplate tx = new TransactionTemplate(transactionManager);
+
+        tx.executeWithoutResult(status -> {
+            Link loaded = links.findById(created.getId()).orElseThrow();
+            ExecutorService other = Executors.newSingleThreadExecutor();
+            try {
+                assertThat(other.submit(() -> usageCounter.consume(created, Instant.now()))
+                        .get(30, TimeUnit.SECONDS)).isTrue();
+            } catch (Exception e) {
+                throw new IllegalStateException(e);
+            } finally {
+                other.shutdown();
+            }
+            loaded.setTargetUrl("https://example.com/b");
+            links.saveAndFlush(loaded);
+        });
+
+        Link found = links.findById(created.getId()).orElseThrow();
+        assertThat(found.getTargetUrl()).isEqualTo("https://example.com/b");
+        assertThat(found.getUseCount()).isEqualTo(1);
+        assertThat(found.getFirstUsedAt()).isNotNull();
+    }
+
+    @Test
+    void resetUsageZeroesCounterAndFirstUse() {
+        Link link = new Link(domain, "reset", "https://example.com", owner);
+        link.setMaxUses(1);
+        data.save(link);
+        usageCounter.consume(link, Instant.now());
+        assertThat(links.findById(link.getId()).orElseThrow().getUseCount()).isEqualTo(1);
+
+        linkService.resetUsage(owner, link.getId());
+
+        Link found = links.findById(link.getId()).orElseThrow();
+        assertThat(found.getUseCount()).isZero();
+        assertThat(found.getFirstUsedAt()).isNull();
     }
 }

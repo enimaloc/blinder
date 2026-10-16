@@ -64,7 +64,7 @@ class LinkAdminTest {
 
     @Test
     void listShowsOwnLinksWithStatus() throws Exception {
-        Link exhausted = data.link(domain, "done", "https://example.com");
+        Link exhausted = new Link(domain, "done", "https://example.com", admin);
         exhausted.setMaxUses(1);
         exhausted.setUseCount(1);
         data.save(exhausted);
@@ -156,7 +156,7 @@ class LinkAdminTest {
 
     @Test
     void resetMakesExhaustedLinkUsableAgain() throws Exception {
-        Link link = data.link(domain, "once", "https://example.com");
+        Link link = new Link(domain, "once", "https://example.com", admin);
         link.setMaxUses(1);
         link.setUseCount(1);
         link.setFirstUsedAt(Instant.now());
