@@ -17,14 +17,15 @@ public record StatsScope(UUID linkId, UUID tagId) {
         return new StatsScope(null, tagId);
     }
 
-    /** Fragment JPQL constant (préfixé par {@code and}) sur l'alias de visite ou de cumul donné. */
+    /** Fragment JPQL constant (préfixé par {@code and}) sur l'alias de visite ou de cumul donné ; le paramètre {@code :owner} est lié par l'appelant. */
     String clause(String alias) {
         String clause = "";
         if (linkId != null) {
             clause += " and " + alias + ".link.id = :linkId";
         }
         if (tagId != null) {
-            clause += " and " + alias + ".link.id in (select sl.id from Link sl join sl.tags st where st.id = :tagId)";
+            clause += " and " + alias + ".link.id in (select sl.id from Link sl join sl.tags st"
+                    + " where st.id = :tagId and sl.owner = :owner and st.owner = :owner)";
         }
         return clause;
     }
