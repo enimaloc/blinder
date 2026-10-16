@@ -81,6 +81,10 @@ public class Link extends BaseEntity {
     @Column(length = 4000)
     private String ipAllowlist;
 
+    /** Choix explicite de l'admin : reste vrai même si tous les appareils sont révoqués (le lien ne s'ouvre jamais). */
+    @Column(nullable = false)
+    private boolean deviceProtected;
+
     @ManyToMany
     @JoinTable(name = "link_devices",
             joinColumns = @JoinColumn(name = "link_id"),

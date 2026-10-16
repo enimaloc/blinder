@@ -1,6 +1,7 @@
 package fr.enimaloc.blinder.admin;
 
 import fr.enimaloc.blinder.device.Device;
+import fr.enimaloc.blinder.device.DeviceService;
 import fr.enimaloc.blinder.domain.Domain;
 import fr.enimaloc.blinder.link.Link;
 import fr.enimaloc.blinder.link.LinkRepository;
@@ -42,6 +43,8 @@ class LinkProtectionAdminTest {
     LinkRepository links;
     @Autowired
     PasswordEncoder encoder;
+    @Autowired
+    DeviceService deviceService;
 
     User admin;
     Domain domain;
@@ -130,6 +133,7 @@ class LinkProtectionAdminTest {
         mvc.perform(create("private").param("deviceIds", laptop.getId().toString()))
                 .andExpect(redirectedUrl("/_/"));
         Link created = link("private");
+        assertThat(created.isDeviceProtected()).isTrue();
         assertThat(links.findDeviceIds(created.getId())).containsExactly(laptop.getId());
 
         mvc.perform(get("/_/links/{id}", created.getId()).with(asAdmin))
@@ -138,5 +142,34 @@ class LinkProtectionAdminTest {
 
         mvc.perform(create("nope").param("deviceIds", foreign.getId().toString()))
                 .andExpect(model().attributeHasFieldErrors("form", "deviceIds"));
+    }
+
+    @Test
+    void warnsWhenEveryAuthorisedDeviceWasRevoked() throws Exception {
+        Device laptop = data.device(admin, "Laptop");
+        Link private1 = data.link(domain, "gone", "https://example.com/gone");
+        data.allowDevice(private1, laptop);
+        mvc.perform(get("/_/links/{id}", private1.getId()).with(asAdmin))
+                .andExpect(content().string(not(containsString("Aucun appareil autorisé restant"))));
+
+        deviceService.revoke(admin, laptop.getId());
+
+        mvc.perform(get("/_/links/{id}", private1.getId()).with(asAdmin))
+                .andExpect(content().string(containsString("Aucun appareil autorisé restant")));
+    }
+
+    @Test
+    void untickingEveryDeviceClearsTheFlag() throws Exception {
+        Device laptop = data.device(admin, "Laptop");
+        mvc.perform(create("temp").param("deviceIds", laptop.getId().toString())).andExpect(redirectedUrl("/_/"));
+        Link created = link("temp");
+        mvc.perform(post("/_/links/{id}", created.getId()).with(asAdmin).with(csrf())
+                        .param("domainId", domain.getId().toString())
+                        .param("slug", "temp")
+                        .param("targetUrl", "https://example.com/temp")
+                        .param("enabled", "true")
+                        .param("version", String.valueOf(created.getVersion())))
+                .andExpect(redirectedUrl("/_/"));
+        assertThat(link("temp").isDeviceProtected()).isFalse();
     }
 }

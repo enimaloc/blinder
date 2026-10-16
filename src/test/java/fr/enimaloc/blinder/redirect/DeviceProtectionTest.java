@@ -1,7 +1,11 @@
 package fr.enimaloc.blinder.redirect;
 
 import fr.enimaloc.blinder.device.Device;
+import fr.enimaloc.blinder.access.LinkStatus;
+import fr.enimaloc.blinder.access.LinkStatusResolver;
 import fr.enimaloc.blinder.device.DeviceCookieService;
+import fr.enimaloc.blinder.device.DeviceService;
+import fr.enimaloc.blinder.link.LinkRepository;
 import fr.enimaloc.blinder.domain.Domain;
 import fr.enimaloc.blinder.link.Link;
 import fr.enimaloc.blinder.support.TestData;
@@ -15,6 +19,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -30,6 +35,12 @@ class DeviceProtectionTest {
     TestData data;
     @Autowired
     PasswordEncoder encoder;
+    @Autowired
+    DeviceService deviceService;
+    @Autowired
+    LinkStatusResolver statuses;
+    @Autowired
+    LinkRepository links;
 
     Domain domain;
     Domain other;
@@ -79,5 +90,18 @@ class DeviceProtectionTest {
                 .andExpect(redirectedUrl("https://example.com/vault"));
         mvc.perform(get("http://go.example.com/vault"))
                 .andExpect(status().isOk());
+    }
+
+    @Test
+    void revokingTheOnlyDeviceNeverOpensTheLink() throws Exception {
+        String cookie = data.credential(laptop, domain);
+        mvc.perform(get("http://go.example.com/private").cookie(cookie(cookie)))
+                .andExpect(status().isFound());
+
+        deviceService.revoke(domain.getOwner(), laptop.getId());
+
+        mvc.perform(get("http://go.example.com/private")).andExpect(status().isNotFound());
+        mvc.perform(get("http://go.example.com/private").cookie(cookie(cookie))).andExpect(status().isNotFound());
+        assertThat(statuses.statusOf(links.findById(link.getId()).orElseThrow())).isEqualTo(LinkStatus.PROTECTED);
     }
 }

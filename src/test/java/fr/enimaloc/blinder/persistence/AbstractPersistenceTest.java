@@ -264,15 +264,15 @@ abstract class AbstractPersistenceTest {
         Device device = data.device(owner, "Laptop");
         data.credential(device, domain);
         data.allowDevice(link, device);
-        assertThat(links.hasDevices(link.getId())).isTrue();
         assertThat(links.isDeviceAllowed(link.getId(), device.getId())).isTrue();
         assertThat(links.findDeviceIds(link.getId())).containsExactly(device.getId());
 
         devices.deleteById(device.getId());
 
-        assertThat(links.hasDevices(link.getId())).isFalse();
+        assertThat(links.findDeviceIds(link.getId())).isEmpty();
+        assertThat(links.isDeviceAllowed(link.getId(), device.getId())).isFalse();
         assertThat(credentials.countByDeviceId(device.getId())).isZero();
-        assertThat(links.findById(link.getId())).isPresent();
+        assertThat(links.findById(link.getId())).get().extracting(Link::isDeviceProtected).isEqualTo(true);
     }
 
     @Test

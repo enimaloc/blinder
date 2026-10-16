@@ -65,6 +65,11 @@ public class LinkService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
     }
 
+    /** Lien protégé par appareils dont tous les appareils ont été révoqués. */
+    public boolean hasNoDeviceLeft(Link link) {
+        return link.isDeviceProtected() && links.findDeviceIds(link.getId()).isEmpty();
+    }
+
     /** {@code link.domain} doit être chargé (les finders de {@link #get} l'assurent). */
     public LinkForm toForm(Link link) {
         LinkForm form = new LinkForm();
@@ -191,6 +196,7 @@ public class LinkService {
         }
         link.getDevices().clear();
         link.getDevices().addAll(owned);
+        link.setDeviceProtected(!owned.isEmpty());
     }
 
     private Instant toInstant(LocalDateTime local) {

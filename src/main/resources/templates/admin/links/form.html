@@ -49,6 +49,7 @@
             <textarea id="ipAllowlist" rows="3" th:field="*{ipAllowlist}"></textarea>
             <p class="error" th:errors="*{ipAllowlist}"></p>
             <p class="notice" th:if="${devices.isEmpty()}">Aucun appareil : <a th:href="@{/_/devices/new}">en enrôler un</a>.</p>
+            <p class="notice" th:if="${noDeviceLeft}">Aucun appareil autorisé restant : ce lien n'est accessible qu'avec un autre moyen configuré, sinon à personne.</p>
             <label th:each="d : ${devices}">
                 <input type="checkbox" th:field="*{deviceIds}" th:value="${d.id}"> <span th:text="${d.name}"></span>
             </label>

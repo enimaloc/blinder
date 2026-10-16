@@ -139,5 +139,6 @@ public class LinkAdminController {
         model.addAttribute("domains", domains.list(owner));
         model.addAttribute("devices", deviceService.all(owner));
         model.addAttribute("hasPassword", link.getPasswordHash() != null);
+        model.addAttribute("noDeviceLeft", links.hasNoDeviceLeft(link));
     }
 }

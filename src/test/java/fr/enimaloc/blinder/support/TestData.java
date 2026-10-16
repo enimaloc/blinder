@@ -81,6 +81,7 @@ public class TestData {
         transactions.executeWithoutResult(status -> {
             Link managed = links.findById(link.getId()).orElseThrow();
             managed.getDevices().add(devices.getReferenceById(device.getId()));
+            managed.setDeviceProtected(true);
         });
     }
 }

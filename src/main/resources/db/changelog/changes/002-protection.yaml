@@ -8,6 +8,7 @@ databaseChangeLog:
             columns:
               - column: { name: password_hash, type: varchar(255) }
               - column: { name: ip_allowlist, type: varchar(4000) }
+              - column: { name: device_protected, type: boolean, defaultValueBoolean: false, constraints: { nullable: false } }
         - createTable:
             tableName: devices
             columns:

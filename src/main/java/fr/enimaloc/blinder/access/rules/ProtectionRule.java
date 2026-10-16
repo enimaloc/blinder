@@ -39,7 +39,7 @@ public class ProtectionRule implements AccessRule {
     public AccessDecision evaluate(Link link, VisitContext context) {
         boolean hasPassword = link.getPasswordHash() != null;
         IpAllowlist allowlist = IpAllowlist.parse(link.getIpAllowlist());
-        boolean hasDevices = devices.hasDevices(link.getId());
+        boolean hasDevices = link.isDeviceProtected();
         if (!hasPassword && allowlist.isEmpty() && !hasDevices) {
             return new Allow();
         }

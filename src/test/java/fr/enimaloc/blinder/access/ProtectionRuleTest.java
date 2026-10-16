@@ -26,11 +26,6 @@ class ProtectionRuleTest {
     static LinkDeviceLookup devices(Set<UUID> allowed) {
         return new LinkDeviceLookup() {
             @Override
-            public boolean hasDevices(UUID linkId) {
-                return !allowed.isEmpty();
-            }
-
-            @Override
             public boolean isAllowed(UUID linkId, UUID deviceId) {
                 return allowed.contains(deviceId);
             }
@@ -60,9 +55,26 @@ class ProtectionRuleTest {
     @Test
     void devicesOnly() {
         Link link = link(null, null);
+        link.setDeviceProtected(true);
         assertThat(evaluate(link, Set.of(ALLOWED_DEVICE), ctx("1.2.3.4", null, null))).isEqualTo(FORBIDDEN);
         assertThat(evaluate(link, Set.of(ALLOWED_DEVICE), ctx("1.2.3.4", null, ALLOWED_DEVICE))).isEqualTo(ALLOW);
         assertThat(evaluate(link, Set.of(ALLOWED_DEVICE), ctx("1.2.3.4", null, OTHER_DEVICE))).isEqualTo(FORBIDDEN);
+    }
+
+    @Test
+    void deviceProtectedLinkWithoutRemainingDevicesIsForbidden() {
+        Link link = link(null, null);
+        link.setDeviceProtected(true);
+        assertThat(evaluate(link, Set.of(), ctx("1.2.3.4", null, null))).isEqualTo(FORBIDDEN);
+        assertThat(evaluate(link, Set.of(), ctx("1.2.3.4", null, OTHER_DEVICE))).isEqualTo(FORBIDDEN);
+    }
+
+    @Test
+    void deviceProtectedLinkWithoutRemainingDevicesFallsBackToPassword() {
+        Link link = link(HASH, null);
+        link.setDeviceProtected(true);
+        assertThat(evaluate(link, Set.of(), ctx("1.2.3.4", null, null))).isEqualTo(ASK);
+        assertThat(evaluate(link, Set.of(), ctx("1.2.3.4", "s3cret", null))).isEqualTo(ALLOW);
     }
 
     @Test
@@ -93,6 +105,7 @@ class ProtectionRuleTest {
     @Test
     void allowedDeviceSkipsPassword() {
         Link link = link(HASH, null);
+        link.setDeviceProtected(true);
         assertThat(evaluate(link, Set.of(ALLOWED_DEVICE), ctx("1.2.3.4", null, ALLOWED_DEVICE))).isEqualTo(ALLOW);
         assertThat(evaluate(link, Set.of(ALLOWED_DEVICE), ctx("1.2.3.4", null, OTHER_DEVICE))).isEqualTo(ASK);
     }
