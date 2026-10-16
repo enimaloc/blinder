@@ -119,8 +119,13 @@ public class LinkAdminController {
             return "admin/links/form";
         }
         try {
+            // `current` vient d'un chargement distinct de celui de update() (open-in-view désactivé)
+            String previousTarget = current.getTargetUrl();
             Link updated = links.update(owner, id, form);
             warnIfExposed(flash, updated);
+            if (!previousTarget.equals(updated.getTargetUrl())) {
+                previews.discard(id);
+            }
             refreshPreviewQuietly(owner, updated);
         } catch (FieldErrorException e) {
             binding.rejectValue(e.field(), "invalid", e.getMessage());

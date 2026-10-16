@@ -28,6 +28,8 @@ class LinkPreviewServiceTest {
     @Autowired
     LinkPreviewRepository previews;
     @Autowired
+    fr.enimaloc.blinder.link.LinkRepository links;
+    @Autowired
     TestData data;
     @MockitoBean
     PreviewFetcher fetcher;
@@ -66,6 +68,26 @@ class LinkPreviewServiceTest {
         LinkPreview preview = service.refresh(owner, link.getId());
         assertThat(preview.getStatus()).isEqualTo(PreviewStatus.OK);
         assertThat(preview.getTitle()).isEqualTo("Old");
+    }
+
+    @Test
+    void previewIsNotSavedWhenTheTargetChangedDuringTheFetch() {
+        when(fetcher.fetch("https://dest.example.org/")).thenAnswer(invocation -> {
+            Link changed = links.findById(link.getId()).orElseThrow();
+            changed.setTargetUrl("https://moved.example.org/");
+            links.save(changed);
+            return Optional.of(new PreviewData("Stale", null, null));
+        });
+        service.refresh(owner, link.getId());
+        assertThat(previews.findByLinkId(link.getId())).isEmpty();
+    }
+
+    @Test
+    void discardRemovesThePreview() {
+        data.preview(link, "Old", null, null, PreviewStatus.OK);
+        service.discard(link.getId());
+        assertThat(previews.findByLinkId(link.getId())).isEmpty();
+        service.discard(link.getId());
     }
 
     @Test

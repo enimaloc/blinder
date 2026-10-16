@@ -30,6 +30,10 @@ public class LinkPreviewService {
         Optional<PreviewData> data = fetcher.fetch(target);
         return transactions.execute(status -> {
             Link link = owned(owner, linkId);
+            if (!link.getTargetUrl().equals(target)) {
+                // la cible a changé pendant la récupération : l'aperçu obtenu est périmé
+                return previews.findByLinkId(linkId).orElse(null);
+            }
             Optional<LinkPreview> existing = previews.findByLinkId(linkId);
             if (data.isEmpty() && existing.filter(p -> p.getStatus() == PreviewStatus.OK).isPresent()) {
                 return existing.get();
@@ -42,6 +46,11 @@ public class LinkPreviewService {
             preview.setImageUrl(data.map(PreviewData::imageUrl).orElse(null));
             return previews.save(preview);
         });
+    }
+
+    @Transactional
+    public void discard(UUID linkId) {
+        previews.findByLinkId(linkId).ifPresent(previews::delete);
     }
 
     @Transactional(readOnly = true)

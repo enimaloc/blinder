@@ -79,6 +79,35 @@ class LinkPreviewAdminTest {
     }
 
     @Test
+    void changingTheTargetDropsTheStalePreview() throws Exception {
+        Link link = new Link(domain, "chg", "https://a.example.org/", admin);
+        link.setMetaMode(MetaMode.PASSTHROUGH);
+        Link saved = data.save(link);
+        data.preview(saved, "Titre A", null, null, PreviewStatus.OK);
+        when(fetcher.fetch(anyString())).thenReturn(Optional.empty());
+        mvc.perform(post("/_/links/{id}", saved.getId()).with(asAdmin).with(csrf())
+                        .param("domainId", domain.getId().toString()).param("slug", "chg")
+                        .param("targetUrl", "https://b.example.org/").param("enabled", "true")
+                        .param("version", String.valueOf(saved.getVersion()))
+                        .param("metaMode", "PASSTHROUGH"))
+                .andExpect(redirectedUrl("/_/"));
+        assertThat(previews.findByLinkId(saved.getId()).filter(p -> p.getStatus() == PreviewStatus.OK)).isEmpty();
+        mvc.perform(get("http://go.example.com/chg").header("User-Agent", "Discordbot/2.0"))
+                .andExpect(content().string(org.hamcrest.Matchers.not(containsString("Titre A"))));
+    }
+
+    @Test
+    void aFailingFetcherNeverBreaksSaving() throws Exception {
+        when(fetcher.fetch(anyString())).thenThrow(new RuntimeException("boom"));
+        mvc.perform(post("/_/links").with(asAdmin).with(csrf())
+                        .param("domainId", domain.getId().toString()).param("slug", "boom")
+                        .param("targetUrl", "https://dest.example.org/").param("enabled", "true")
+                        .param("metaMode", "PASSTHROUGH"))
+                .andExpect(redirectedUrl("/_/"));
+        assertThat(links.findByDomainAndSlug(domain, "boom")).isPresent();
+    }
+
+    @Test
     void otherModesNeverFetch() throws Exception {
         mvc.perform(post("/_/links").with(asAdmin).with(csrf())
                         .param("domainId", domain.getId().toString()).param("slug", "n")
