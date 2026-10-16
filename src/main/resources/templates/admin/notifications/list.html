@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="fr" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{admin/fragments :: head('Notifications')}"></head>
+<body>
+<nav th:replace="~{admin/fragments :: nav}"></nav>
+<main>
+    <h1>Notifications</h1>
+    <p class="error" th:if="${error}" th:text="${error}"></p>
+    <p class="notice" th:if="${info}" th:text="${info}"></p>
+    <h2>Canaux</h2>
+    <p><a th:href="@{/_/notifications/channels/new}">Ajouter un canal</a></p>
+    <table>
+        <tr><th>Nom</th><th>Type</th><th>Cible</th><th>État</th><th>Par défaut</th><th></th></tr>
+        <tr th:each="c : ${channels}">
+            <td><a th:href="@{/_/notifications/channels/{id}(id=${c.id})}" th:text="${c.name}"></a></td>
+            <td th:text="${c.type.name() == 'WEBHOOK'} ? 'Webhook' : 'E-mail'"></td>
+            <td th:text="${c.target}"></td>
+            <td th:text="${c.enabled} ? 'Actif' : 'Désactivé'"></td>
+            <td th:text="${c.preselected} ? 'Oui' : 'Non'"></td>
+            <td>
+                <form class="inline" th:action="@{/_/notifications/channels/{id}/test(id=${c.id})}" method="post">
+                    <button type="submit">Tester</button>
+                </form>
+                <form class="inline" th:action="@{/_/notifications/channels/{id}/delete(id=${c.id})}" method="post">
+                    <button class="danger" type="submit">Supprimer</button>
+                </form>
+            </td>
+        </tr>
+    </table>
+    <h2>Envois récents</h2>
+    <table>
+        <tr><th>Date</th><th>Canal</th><th>Événement</th><th>Lien</th><th>Statut</th><th>Essais</th><th>Dernière erreur</th><th></th></tr>
+        <tr th:each="d : ${deliveries}">
+            <td th:text="${d.date}"></td>
+            <td th:text="${d.channel}"></td>
+            <td th:text="${d.event}"></td>
+            <td th:text="${d.link}"></td>
+            <td th:text="${d.status}"></td>
+            <td th:text="${d.attempts}"></td>
+            <td th:text="${d.error}"></td>
+            <td>
+                <form class="inline" th:if="${d.retryable}" th:action="@{/_/notifications/deliveries/{id}/retry(id=${d.id})}" method="post">
+                    <button type="submit">Relancer</button>
+                </form>
+            </td>
+        </tr>
+        <tr th:if="${deliveries.isEmpty()}"><td colspan="8" class="notice">Aucun envoi.</td></tr>
+    </table>
+</main>
+</body>
+</html>

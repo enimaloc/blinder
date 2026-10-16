@@ -1,7 +1,6 @@
 package fr.enimaloc.blinder.link.preview;
 
 import org.apache.hc.client5.http.DnsResolver;
-import org.apache.hc.client5.http.SystemDefaultDnsResolver;
 import org.apache.hc.client5.http.classic.methods.HttpGet;
 import org.apache.hc.client5.http.config.ConnectionConfig;
 import org.apache.hc.client5.http.config.RequestConfig;
@@ -18,10 +17,8 @@ import org.apache.hc.core5.util.Timeout;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.net.InetAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.net.UnknownHostException;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.Optional;
@@ -49,23 +46,7 @@ public class PreviewFetcher implements AutoCloseable {
 
     public PreviewFetcher(AddressPolicy policy) {
         watchdog.setRemoveOnCancelPolicy(true);
-        DnsResolver resolver = new DnsResolver() {
-            @Override
-            public InetAddress[] resolve(String host) throws UnknownHostException {
-                InetAddress[] addresses = SystemDefaultDnsResolver.INSTANCE.resolve(host);
-                for (InetAddress address : addresses) {
-                    if (!policy.allowed(address)) {
-                        throw new UnknownHostException("Adresse refusée pour " + host);
-                    }
-                }
-                return addresses;
-            }
-
-            @Override
-            public String resolveCanonicalHostname(String host) throws UnknownHostException {
-                return host;
-            }
-        };
+        DnsResolver resolver = new FilteringDnsResolver(policy);
         PoolingHttpClientConnectionManager manager = PoolingHttpClientConnectionManagerBuilder.create()
                 .setDnsResolver(resolver)
                 .setDefaultConnectionConfig(ConnectionConfig.custom()

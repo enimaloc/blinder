@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="fr" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{admin/fragments :: head(${channelId == null} ? 'Nouveau canal' : 'Modifier le canal')}"></head>
+<body>
+<nav th:replace="~{admin/fragments :: nav}"></nav>
+<main>
+    <h1 th:text="${channelId == null} ? 'Nouveau canal' : 'Modifier le canal'"></h1>
+    <form th:object="${form}" method="post"
+          th:action="${channelId == null} ? @{/_/notifications/channels} : @{/_/notifications/channels/{id}(id=${channelId})}">
+        <label for="name">Nom</label>
+        <input id="name" th:field="*{name}" maxlength="64" required>
+        <p class="error" th:errors="*{name}"></p>
+        <label for="type">Type</label>
+        <select id="type" th:field="*{type}">
+            <option value="WEBHOOK">Webhook (signé HMAC)</option>
+            <option value="EMAIL">E-mail</option>
+        </select>
+        <p class="error" th:errors="*{type}"></p>
+        <p class="notice" th:if="${!smtpConfigured}">SMTP non configuré (<code>spring.mail.host</code>) : les envois e-mail échoueront.</p>
+        <label for="target">Cible (URL http(s) ou adresse e-mail)</label>
+        <input id="target" th:field="*{target}" maxlength="2048" required>
+        <p class="error" th:errors="*{target}"></p>
+        <label><input type="checkbox" th:field="*{allowPrivateNetwork}"> Autoriser les adresses privées (webhook)</label>
+        <label><input type="checkbox" th:field="*{preselected}"> Proposé par défaut aux nouveaux liens</label>
+        <label><input type="checkbox" th:field="*{enabled}"> Actif</label>
+        <p><button type="submit">Enregistrer</button></p>
+    </form>
+    <form th:if="${channelId != null}" th:action="@{/_/notifications/channels/{id}/test(id=${channelId})}" method="post">
+        <button type="submit">Envoyer un test</button>
+    </form>
+    <section th:if="${channelId != null and secret != null}">
+        <h2>Secret du webhook</h2>
+        <p><code th:text="${secret}"></code></p>
+        <form th:action="@{/_/notifications/channels/{id}/secret(id=${channelId})}" method="post">
+            <button type="submit">Régénérer</button>
+        </form>
+    </section>
+</main>
+</body>
+</html>

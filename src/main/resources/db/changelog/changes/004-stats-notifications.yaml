@@ -1,0 +1,135 @@
+databaseChangeLog:
+  - changeSet:
+      id: 004-stats-notifications
+      author: blinder
+      changes:
+        - createTable:
+            tableName: visits
+            columns:
+              - column: { name: id, type: char(36), constraints: { primaryKey: true, nullable: false } }
+              - column: { name: link_id, type: char(36), constraints: { nullable: false, foreignKeyName: fk_visits_link, references: links(id), deleteCascade: true } }
+              - column: { name: owner_id, type: char(36), constraints: { nullable: false, foreignKeyName: fk_visits_owner, references: users(id), deleteCascade: true } }
+              - column: { name: occurred_at, type: "${timestamp.type}", constraints: { nullable: false } }
+              - column: { name: outcome, type: varchar(24), constraints: { nullable: false } }
+              - column: { name: deny_reason, type: varchar(16) }
+              - column: { name: http_method, type: varchar(8) }
+              - column: { name: bot, type: boolean, defaultValueBoolean: false, constraints: { nullable: false } }
+              - column: { name: ip, type: varchar(45) }
+              - column: { name: user_agent, type: varchar(512) }
+              - column: { name: browser, type: varchar(16) }
+              - column: { name: os, type: varchar(16) }
+              - column: { name: referer, type: varchar(1024) }
+              - column: { name: referer_host, type: varchar(255) }
+              - column: { name: country, type: char(2) }
+              - column: { name: city, type: varchar(128) }
+        - createIndex:
+            tableName: visits
+            indexName: idx_visits_link_occurred
+            columns:
+              - column: { name: link_id }
+              - column: { name: occurred_at }
+        - createIndex:
+            tableName: visits
+            indexName: idx_visits_owner_occurred
+            columns:
+              - column: { name: owner_id }
+              - column: { name: occurred_at }
+        - createIndex:
+            tableName: visits
+            indexName: idx_visits_occurred
+            columns:
+              - column: { name: occurred_at }
+        - createTable:
+            tableName: visit_daily_stats
+            columns:
+              - column: { name: id, type: char(36), constraints: { primaryKey: true, nullable: false } }
+              - column: { name: link_id, type: char(36), constraints: { nullable: false, foreignKeyName: fk_visit_daily_stats_link, references: links(id), deleteCascade: true } }
+              - column: { name: owner_id, type: char(36), constraints: { nullable: false, foreignKeyName: fk_visit_daily_stats_owner, references: users(id), deleteCascade: true } }
+              - column: { name: stat_day, type: date, constraints: { nullable: false } }
+              - column: { name: outcome, type: varchar(24), constraints: { nullable: false } }
+              - column: { name: visits, type: bigint, defaultValueNumeric: 0, constraints: { nullable: false } }
+        - createIndex:
+            tableName: visit_daily_stats
+            indexName: uk_visit_daily_stats_link_day_outcome
+            unique: true
+            columns:
+              - column: { name: link_id }
+              - column: { name: stat_day }
+              - column: { name: outcome }
+        - createIndex:
+            tableName: visit_daily_stats
+            indexName: idx_visit_daily_stats_owner_day
+            columns:
+              - column: { name: owner_id }
+              - column: { name: stat_day }
+        - createTable:
+            tableName: notification_channels
+            columns:
+              - column: { name: id, type: char(36), constraints: { primaryKey: true, nullable: false } }
+              - column: { name: created_at, type: "${timestamp.type}", constraints: { nullable: false } }
+              - column: { name: updated_at, type: "${timestamp.type}", constraints: { nullable: false } }
+              - column: { name: version, type: bigint, constraints: { nullable: false } }
+              - column: { name: owner_id, type: char(36), constraints: { nullable: false, foreignKeyName: fk_notification_channels_owner, references: users(id), deleteCascade: true } }
+              - column: { name: name, type: varchar(64), constraints: { nullable: false } }
+              - column: { name: type, type: varchar(16), constraints: { nullable: false } }
+              - column: { name: target, type: varchar(2048), constraints: { nullable: false } }
+              - column: { name: secret, type: varchar(64) }
+              - column: { name: allow_private_network, type: boolean, defaultValueBoolean: false, constraints: { nullable: false } }
+              - column: { name: preselected, type: boolean, defaultValueBoolean: false, constraints: { nullable: false } }
+              - column: { name: enabled, type: boolean, defaultValueBoolean: true, constraints: { nullable: false } }
+        - createTable:
+            tableName: link_notification_settings
+            columns:
+              - column: { name: id, type: char(36), constraints: { primaryKey: true, nullable: false } }
+              - column: { name: created_at, type: "${timestamp.type}", constraints: { nullable: false } }
+              - column: { name: updated_at, type: "${timestamp.type}", constraints: { nullable: false } }
+              - column: { name: version, type: bigint, constraints: { nullable: false } }
+              - column: { name: link_id, type: char(36), constraints: { nullable: false, unique: true, uniqueConstraintName: uk_link_notification_settings_link, foreignKeyName: fk_link_notification_settings_link, references: links(id), deleteCascade: true } }
+              - column: { name: on_exhausted, type: boolean, defaultValueBoolean: false, constraints: { nullable: false } }
+              - column: { name: on_expired, type: boolean, defaultValueBoolean: false, constraints: { nullable: false } }
+              - column: { name: on_denials, type: boolean, defaultValueBoolean: false, constraints: { nullable: false } }
+              - column: { name: on_each_visit, type: boolean, defaultValueBoolean: false, constraints: { nullable: false } }
+              - column: { name: visit_threshold, type: int }
+        - createTable:
+            tableName: link_notification_channels
+            columns:
+              - column: { name: settings_id, type: char(36), constraints: { nullable: false, primaryKey: true, primaryKeyName: pk_link_notification_channels, foreignKeyName: fk_link_notification_channels_settings, references: link_notification_settings(id), deleteCascade: true } }
+              - column: { name: channel_id, type: char(36), constraints: { nullable: false, primaryKey: true, primaryKeyName: pk_link_notification_channels, foreignKeyName: fk_link_notification_channels_channel, references: notification_channels(id), deleteCascade: true } }
+        - createTable:
+            tableName: notification_triggers_fired
+            columns:
+              - column: { name: id, type: char(36), constraints: { primaryKey: true, nullable: false } }
+              - column: { name: link_id, type: char(36), constraints: { nullable: false, foreignKeyName: fk_notification_triggers_fired_link, references: links(id), deleteCascade: true } }
+              - column: { name: trigger_type, type: varchar(16), constraints: { nullable: false } }
+              - column: { name: fired_at, type: "${timestamp.type}", constraints: { nullable: false } }
+        - createIndex:
+            tableName: notification_triggers_fired
+            indexName: uk_notification_triggers_fired_link_type
+            unique: true
+            columns:
+              - column: { name: link_id }
+              - column: { name: trigger_type }
+        - createTable:
+            tableName: notification_deliveries
+            columns:
+              - column: { name: id, type: char(36), constraints: { primaryKey: true, nullable: false } }
+              - column: { name: created_at, type: "${timestamp.type}", constraints: { nullable: false } }
+              - column: { name: updated_at, type: "${timestamp.type}", constraints: { nullable: false } }
+              - column: { name: version, type: bigint, constraints: { nullable: false } }
+              - column: { name: owner_id, type: char(36), constraints: { nullable: false, foreignKeyName: fk_notification_deliveries_owner, references: users(id), deleteCascade: true } }
+              - column: { name: channel_id, type: char(36), constraints: { nullable: false, foreignKeyName: fk_notification_deliveries_channel, references: notification_channels(id), deleteCascade: true } }
+              - column: { name: link_id, type: char(36) }
+              - column: { name: link_label, type: varchar(400) }
+              - column: { name: event, type: varchar(24), constraints: { nullable: false } }
+              - column: { name: payload, type: varchar(8000), constraints: { nullable: false } }
+              - column: { name: status, type: varchar(16), constraints: { nullable: false } }
+              - column: { name: attempts, type: int, defaultValueNumeric: 0, constraints: { nullable: false } }
+              - column: { name: next_attempt_at, type: "${timestamp.type}" }
+              - column: { name: last_error, type: varchar(500) }
+              - column: { name: sent_at, type: "${timestamp.type}" }
+        - createIndex:
+            tableName: notification_deliveries
+            indexName: idx_notification_deliveries_status_next
+            columns:
+              - column: { name: status }
+              - column: { name: next_attempt_at }

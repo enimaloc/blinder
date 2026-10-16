@@ -18,6 +18,8 @@ public class VisitContextFactory {
     static final String PASSWORD_QUERY_PARAM = "pw";
     static final String PASSWORD_FORM_FIELD = "password";
 
+    static final int MAX_REFERER = 1024;
+
     private final Clock clock;
     private final BotDetector botDetector;
     private final DeviceCookieService deviceCookies;
@@ -31,7 +33,16 @@ public class VisitContextFactory {
                 request.getMethod(),
                 Instant.now(clock),
                 submittedPassword(request),
-                deviceCookies.authenticate(request).orElse(null));
+                deviceCookies.authenticate(request).orElse(null),
+                referer(request));
+    }
+
+    private static String referer(HttpServletRequest request) {
+        String referer = request.getHeader(HttpHeaders.REFERER);
+        if (referer == null || referer.isBlank()) {
+            return null;
+        }
+        return referer.length() > MAX_REFERER ? referer.substring(0, MAX_REFERER) : referer;
     }
 
     private static String submittedPassword(HttpServletRequest request) {

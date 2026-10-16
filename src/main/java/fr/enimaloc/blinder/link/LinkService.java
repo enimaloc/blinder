@@ -9,6 +9,8 @@ import fr.enimaloc.blinder.device.Device;
 import fr.enimaloc.blinder.device.DeviceRepository;
 import fr.enimaloc.blinder.domain.Domain;
 import fr.enimaloc.blinder.domain.DomainRepository;
+import fr.enimaloc.blinder.notification.FiredTriggerRepository;
+import fr.enimaloc.blinder.notification.TriggerType;
 import fr.enimaloc.blinder.redirect.RedirectPolicy;
 import fr.enimaloc.blinder.user.User;
 import org.springframework.http.HttpStatus;
@@ -38,15 +40,18 @@ public class LinkService {
     private final SlugPolicy slugs;
     private final PasswordEncoder encoder;
     private final DeviceRepository devices;
+    private final FiredTriggerRepository firedTriggers;
     private final ZoneId zone;
 
     public LinkService(LinkRepository links, DomainRepository domains, SlugPolicy slugs,
-                       PasswordEncoder encoder, DeviceRepository devices, BlinderProperties properties) {
+                       PasswordEncoder encoder, DeviceRepository devices, FiredTriggerRepository firedTriggers,
+                       BlinderProperties properties) {
         this.links = links;
         this.domains = domains;
         this.slugs = slugs;
         this.encoder = encoder;
         this.devices = devices;
+        this.firedTriggers = firedTriggers;
         this.zone = properties.admin().timeZone();
     }
 
@@ -124,12 +129,21 @@ public class LinkService {
         link.setSlug(resolveSlug(domain, requested, id));
         link.setDomain(domain);
         apply(link, form, owner);
-        return links.saveAndFlush(link);
+        Link saved = links.saveAndFlush(link);
+        rearmNotifications(id);
+        return saved;
     }
 
     @Transactional
     public void resetUsage(User owner, UUID id) {
         links.resetUsage(get(owner, id).getId());
+        rearmNotifications(id);
+    }
+
+    /** Un lien modifié ou remis à zéro peut de nouveau notifier seuil, épuisement et expiration. */
+    private void rearmNotifications(UUID linkId) {
+        firedTriggers.deleteByLinkIdAndTriggerTypeIn(linkId,
+                Set.of(TriggerType.EXHAUSTED, TriggerType.EXPIRED, TriggerType.THRESHOLD));
     }
 
     @Transactional

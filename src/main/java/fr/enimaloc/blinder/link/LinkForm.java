@@ -89,6 +89,19 @@ public class LinkForm {
     @Size(max = 2048)
     private String metaImageUrl;
 
+    private boolean notifyExhausted;
+
+    private boolean notifyExpired;
+
+    private boolean notifyDenials;
+
+    private boolean notifyEachVisit;
+
+    @Min(1)
+    private Integer notifyThreshold;
+
+    private Set<UUID> notifyChannelIds = new LinkedHashSet<>();
+
     /** Le formulaire posté déclare-t-il une limite ou une protection (pour l'avertissement d'aperçu) ? */
     public boolean declaresLimitOrProtection(boolean hasExistingPassword) {
         return (newPassword != null && !newPassword.isEmpty())

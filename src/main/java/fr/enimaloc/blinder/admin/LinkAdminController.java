@@ -10,6 +10,8 @@ import fr.enimaloc.blinder.link.Link;
 import fr.enimaloc.blinder.link.LinkForm;
 import fr.enimaloc.blinder.link.LinkService;
 import fr.enimaloc.blinder.link.preview.LinkPreviewService;
+import fr.enimaloc.blinder.notification.ChannelService;
+import fr.enimaloc.blinder.notification.LinkNotificationService;
 import fr.enimaloc.blinder.common.StaleEditException;
 import fr.enimaloc.blinder.user.CurrentUser;
 import fr.enimaloc.blinder.user.User;
@@ -49,6 +51,8 @@ public class LinkAdminController {
     private final DeviceService deviceService;
     private final LinkPreviewService previews;
     private final BlinderProperties properties;
+    private final LinkNotificationService linkNotifications;
+    private final ChannelService channels;
 
     @GetMapping("/")
     public String list(@RequestParam(name = "domain", required = false) UUID domainId, Model model) {
@@ -70,7 +74,9 @@ public class LinkAdminController {
         if (!owned.isEmpty()) {
             form.setDomainId(owned.getFirst().getId());
         }
+        linkNotifications.preselect(owner, form);
         model.addAttribute("form", form);
+        model.addAttribute("channels", channels.list(owner));
         model.addAttribute("domains", owned);
         model.addAttribute("devices", deviceService.all(owner));
         model.addAttribute("hasPassword", false);
@@ -83,6 +89,7 @@ public class LinkAdminController {
                          RedirectAttributes flash) {
         User owner = currentUser.require();
         model.addAttribute("domains", domains.list(owner));
+        model.addAttribute("channels", channels.list(owner));
         model.addAttribute("devices", deviceService.all(owner));
         model.addAttribute("hasPassword", false);
         model.addAttribute("limitedOrProtected", form.declaresLimitOrProtection(false));
@@ -90,7 +97,9 @@ public class LinkAdminController {
             return "admin/links/form";
         }
         try {
+            linkNotifications.validate(owner, form);
             Link created = links.create(owner, form);
+            linkNotifications.apply(owner, created, form);
             warnIfExposed(flash, created);
             refreshPreviewQuietly(owner, created);
         } catch (FieldErrorException e) {
@@ -107,7 +116,9 @@ public class LinkAdminController {
     public String edit(@PathVariable UUID id, Model model) {
         User owner = currentUser.require();
         Link link = links.get(owner, id);
-        model.addAttribute("form", links.toForm(link));
+        LinkForm form = links.toForm(link);
+        linkNotifications.fillForm(form, id);
+        model.addAttribute("form", form);
         populateEdit(model, owner, link);
         return "admin/links/form";
     }
@@ -126,7 +137,9 @@ public class LinkAdminController {
         try {
             // `current` vient d'un chargement distinct de celui de update() (open-in-view désactivé)
             String previousTarget = current.getTargetUrl();
+            linkNotifications.validate(owner, form);
             Link updated = links.update(owner, id, form);
+            linkNotifications.apply(owner, updated, form);
             warnIfExposed(flash, updated);
             if (!previousTarget.equals(updated.getTargetUrl())) {
                 previews.discard(id);
@@ -165,6 +178,7 @@ public class LinkAdminController {
 
     private void populateEdit(Model model, User owner, Link link) {
         model.addAttribute("linkId", link.getId());
+        model.addAttribute("channels", channels.list(owner));
         model.addAttribute("useCount", link.getUseCount());
         model.addAttribute("status", statuses.statusOf(link));
         model.addAttribute("publicUrl", link.getDomain().getHost() + "/" + link.getSlug());

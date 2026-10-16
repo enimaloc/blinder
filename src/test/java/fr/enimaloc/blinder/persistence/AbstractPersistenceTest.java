@@ -6,6 +6,7 @@ import fr.enimaloc.blinder.device.DeviceEnrollmentRepository;
 import fr.enimaloc.blinder.device.DeviceRepository;
 import fr.enimaloc.blinder.device.DeviceTokens;
 import fr.enimaloc.blinder.domain.Domain;
+import fr.enimaloc.blinder.access.DenyReason;
 import fr.enimaloc.blinder.link.Link;
 import fr.enimaloc.blinder.link.LinkRepository;
 import fr.enimaloc.blinder.link.LinkService;
@@ -13,6 +14,22 @@ import fr.enimaloc.blinder.link.MetaMode;
 import fr.enimaloc.blinder.link.preview.LinkPreviewRepository;
 import fr.enimaloc.blinder.link.preview.PreviewStatus;
 import fr.enimaloc.blinder.link.UsageCounter;
+import fr.enimaloc.blinder.notification.ChannelType;
+import fr.enimaloc.blinder.notification.DeliveryStatus;
+import fr.enimaloc.blinder.notification.FiredTrigger;
+import fr.enimaloc.blinder.notification.FiredTriggerRepository;
+import fr.enimaloc.blinder.notification.LinkNotificationSettings;
+import fr.enimaloc.blinder.notification.LinkNotificationSettingsRepository;
+import fr.enimaloc.blinder.notification.NotificationChannel;
+import fr.enimaloc.blinder.notification.NotificationChannelRepository;
+import fr.enimaloc.blinder.notification.NotificationDelivery;
+import fr.enimaloc.blinder.notification.NotificationDeliveryRepository;
+import fr.enimaloc.blinder.notification.TriggerType;
+import fr.enimaloc.blinder.stats.Visit;
+import fr.enimaloc.blinder.stats.VisitDailyStat;
+import fr.enimaloc.blinder.stats.VisitDailyStatRepository;
+import fr.enimaloc.blinder.stats.VisitOutcome;
+import fr.enimaloc.blinder.stats.VisitRepository;
 import fr.enimaloc.blinder.support.TestData;
 import fr.enimaloc.blinder.user.User;
 import org.junit.jupiter.api.BeforeEach;
@@ -32,7 +49,11 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.time.Duration;
+import java.io.StringWriter;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.util.Set;
+import java.util.UUID;
 import java.time.temporal.ChronoUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -59,6 +80,22 @@ abstract class AbstractPersistenceTest {
     DeviceEnrollmentRepository enrollments;
     @Autowired
     LinkPreviewRepository previews;
+
+    @Autowired
+    VisitRepository visits;
+    @Autowired
+    VisitDailyStatRepository dailyStats;
+    @Autowired
+    NotificationChannelRepository channels;
+    @Autowired
+    LinkNotificationSettingsRepository settingsRepository;
+    @Autowired
+    FiredTriggerRepository firedTriggers;
+    @Autowired
+    NotificationDeliveryRepository deliveries;
+
+    @Autowired
+    fr.enimaloc.blinder.stats.StatsQuery statsQuery;
 
     @Autowired
     PlatformTransactionManager transactionManager;
@@ -384,5 +421,146 @@ abstract class AbstractPersistenceTest {
 
         links.deleteById(link.getId());
         assertThat(previews.findByLinkId(link.getId())).isEmpty();
+    }
+
+    @Test
+    void roundTripsVisitAndDailyStat() {
+        Link link = data.link(domain, "vis", "https://example.com");
+        Instant at = Instant.now().truncatedTo(ChronoUnit.SECONDS);
+        Visit saved = visits.saveAndFlush(new Visit(links.getReferenceById(link.getId()), owner, at,
+                VisitOutcome.DENIED, DenyReason.FORBIDDEN, "GET", true, "203.0.113.9", "UA/1.0",
+                "Chrome", "Windows", "https://ref.example/page?x=1", "ref.example", "FR", "Paris"));
+
+        Visit found = visits.findById(saved.getId()).orElseThrow();
+        assertThat(found.getLink().getId()).isEqualTo(link.getId());
+        assertThat(found.getOwner().getId()).isEqualTo(owner.getId());
+        assertThat(found.getOccurredAt()).isEqualTo(at);
+        assertThat(found.getOutcome()).isEqualTo(VisitOutcome.DENIED);
+        assertThat(found.getDenyReason()).isEqualTo(DenyReason.FORBIDDEN);
+        assertThat(found.getHttpMethod()).isEqualTo("GET");
+        assertThat(found.isBot()).isTrue();
+        assertThat(found.getIp()).isEqualTo("203.0.113.9");
+        assertThat(found.getUserAgent()).isEqualTo("UA/1.0");
+        assertThat(found.getBrowser()).isEqualTo("Chrome");
+        assertThat(found.getOs()).isEqualTo("Windows");
+        assertThat(found.getReferer()).isEqualTo("https://ref.example/page?x=1");
+        assertThat(found.getRefererHost()).isEqualTo("ref.example");
+        assertThat(found.getCountry()).isEqualTo("FR");
+        assertThat(found.getCity()).isEqualTo("Paris");
+
+        LocalDate day = LocalDate.of(2026, 10, 16);
+        VisitDailyStat stat = new VisitDailyStat(links.getReferenceById(link.getId()), owner, day, VisitOutcome.REDIRECTED);
+        stat.increment(3);
+        dailyStats.saveAndFlush(stat);
+        VisitDailyStat foundStat = dailyStats.findByLinkIdAndDayAndOutcome(link.getId(), day, VisitOutcome.REDIRECTED)
+                .orElseThrow();
+        assertThat(foundStat.getVisits()).isEqualTo(3);
+        assertThat(foundStat.getDay()).isEqualTo(day);
+        assertThat(foundStat.getOwner().getId()).isEqualTo(owner.getId());
+        assertThat(dailyStats.findByLinkIdAndDayAndOutcome(link.getId(), day, VisitOutcome.DENIED)).isEmpty();
+    }
+
+    @Test
+    void roundTripsChannelSettingsAndDelivery() {
+        Link link = data.link(domain, "notif", "https://example.com");
+        NotificationChannel channel = data.channel(owner, "Hook", ChannelType.WEBHOOK, "https://hooks.example/x");
+        channel.setSecret("s3cret");
+        channel.setAllowPrivateNetwork(true);
+        channels.saveAndFlush(channel);
+
+        LinkNotificationSettings settings = new LinkNotificationSettings(links.getReferenceById(link.getId()));
+        settings.setOnExhausted(true);
+        settings.setVisitThreshold(5);
+        settings.setChannels(new java.util.HashSet<>(Set.of(channel)));
+        settingsRepository.saveAndFlush(settings);
+
+        FiredTrigger fired = new FiredTrigger(links.getReferenceById(link.getId()), TriggerType.EXHAUSTED);
+        fired.setFiredAt(Instant.now());
+        firedTriggers.saveAndFlush(fired);
+
+        Instant next = Instant.now().truncatedTo(ChronoUnit.SECONDS);
+        deliveries.saveAndFlush(new NotificationDelivery(owner, channel, link.getId(), "go.example.com/notif",
+                TriggerType.EXHAUSTED, "{\"event\":\"EXHAUSTED\"}", next));
+
+        NotificationChannel foundChannel = channels.findByIdAndOwner(channel.getId(), owner).orElseThrow();
+        assertThat(foundChannel.getSecret()).isEqualTo("s3cret");
+        assertThat(foundChannel.isAllowPrivateNetwork()).isTrue();
+        assertThat(foundChannel.isEnabled()).isTrue();
+        assertThat(channels.findByOwnerOrderByNameAsc(owner)).hasSize(1);
+        assertThat(channels.findByOwnerAndPreselectedTrue(owner)).isEmpty();
+
+        LinkNotificationSettings found = settingsRepository.findWithChannelsByLinkId(link.getId()).orElseThrow();
+        assertThat(found.isOnExhausted()).isTrue();
+        assertThat(found.isOnEachVisit()).isFalse();
+        assertThat(found.getVisitThreshold()).isEqualTo(5);
+        assertThat(found.getChannels()).extracting(NotificationChannel::getId).containsExactly(channel.getId());
+        assertThat(settingsRepository.findByLinkId(link.getId())).isPresent();
+
+        assertThat(firedTriggers.findByLinkIdAndTriggerType(link.getId(), TriggerType.EXHAUSTED)).isPresent();
+
+        NotificationDelivery delivery = deliveries.findTop100ByOwnerOrderByCreatedAtDesc(owner).getFirst();
+        assertThat(delivery.getStatus()).isEqualTo(DeliveryStatus.PENDING);
+        assertThat(delivery.getLinkId()).isEqualTo(link.getId());
+        assertThat(delivery.getNextAttemptAt()).isEqualTo(next);
+        assertThat(deliveries.findTop20ByStatusAndNextAttemptAtLessThanEqualOrderByNextAttemptAtAsc(
+                DeliveryStatus.PENDING, next)).hasSize(1);
+    }
+
+    @Test
+    void deletingALinkCascadesStatsAndSettings() {
+        Link link = data.link(domain, "casc", "https://example.com");
+        Link ref = links.getReferenceById(link.getId());
+        NotificationChannel channel = data.channel(owner, "Hook", ChannelType.EMAIL, "me@example.com");
+        data.visit(link, VisitOutcome.REDIRECTED, Instant.now(), "203.0.113.1");
+        dailyStats.saveAndFlush(new VisitDailyStat(ref, owner, LocalDate.of(2026, 10, 16), VisitOutcome.REDIRECTED));
+        LinkNotificationSettings settings = new LinkNotificationSettings(ref);
+        settings.setChannels(new java.util.HashSet<>(Set.of(channel)));
+        settingsRepository.saveAndFlush(settings);
+        firedTriggers.saveAndFlush(new FiredTrigger(ref, TriggerType.EXPIRED));
+        NotificationDelivery delivery = deliveries.saveAndFlush(new NotificationDelivery(owner, channel, link.getId(),
+                "label", TriggerType.EXPIRED, "{}", Instant.now()));
+
+        links.delete(links.findById(link.getId()).orElseThrow());
+        links.flush();
+
+        assertThat(visits.count()).isZero();
+        assertThat(dailyStats.count()).isZero();
+        assertThat(settingsRepository.findByLinkId(link.getId())).isEmpty();
+        assertThat(firedTriggers.findByLinkIdAndTriggerType(link.getId(), TriggerType.EXPIRED)).isEmpty();
+        assertThat(deliveries.findByIdAndOwner(delivery.getId(), owner)).isPresent();
+        assertThat(channels.findByIdAndOwner(channel.getId(), owner)).isPresent();
+    }
+
+    @Test
+    void deleteOlderThanPurgesOnlyOldVisits() {
+        Link link = data.link(domain, "purge", "https://example.com");
+        Instant now = Instant.now().truncatedTo(ChronoUnit.SECONDS);
+        data.visit(link, VisitOutcome.REDIRECTED, now.minus(Duration.ofDays(100)), "203.0.113.1");
+        Visit recent = data.visit(link, VisitOutcome.REDIRECTED, now.minus(Duration.ofDays(1)), "203.0.113.2");
+
+        int deleted = visits.deleteOlderThan(now.minus(Duration.ofDays(90)));
+
+        assertThat(deleted).isEqualTo(1);
+        assertThat(visits.findAll()).extracting(Visit::getId).containsExactly(recent.getId());
+    }
+
+    @Test
+    void statsQueriesRunOnThisDatabase() {
+        Link link = data.link(domain, "stats", "https://example.com");
+        Instant now = Instant.now().minusSeconds(60);
+        data.visit(link, VisitOutcome.REDIRECTED, now, "203.0.113.1");
+        data.visit(link, VisitOutcome.DENIED, now, "203.0.113.1");
+        var period = fr.enimaloc.blinder.stats.StatsPeriod.D7;
+
+        assertThat(statsQuery.totals(owner, null, period).total()).isEqualTo(2);
+        assertThat(statsQuery.totals(owner, link.getId(), period).uniqueIps()).isEqualTo(1);
+        assertThat(statsQuery.topCountries(owner, null, period)).hasSize(1);
+        assertThat(statsQuery.topReferers(owner, link.getId(), period)).hasSize(1);
+        assertThat(statsQuery.topLinks(owner, period)).hasSize(1);
+        assertThat(statsQuery.recent(owner, null, period, 50)).hasSize(2);
+        assertThat(statsQuery.daily(owner, link.getId(), period)).hasSize(7);
+        StringWriter csv = new StringWriter();
+        statsQuery.exportCsv(owner, null, period, csv);
+        assertThat(csv.toString().split("\r\n")).hasSize(3);
     }
 }

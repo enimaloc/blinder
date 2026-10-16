@@ -73,6 +73,21 @@
             <p class="error" th:errors="*{interstitialSeconds}"></p>
         </fieldset>
         <fieldset>
+            <legend>Notifications</legend>
+            <p class="notice" th:if="${channels.isEmpty()}">Aucun canal : <a th:href="@{/_/notifications/channels/new}">en créer un</a>.</p>
+            <label><input type="checkbox" th:field="*{notifyExhausted}"> Lien épuisé</label>
+            <label><input type="checkbox" th:field="*{notifyExpired}"> Lien expiré</label>
+            <label><input type="checkbox" th:field="*{notifyDenials}"> Refus répétés</label>
+            <label><input type="checkbox" th:field="*{notifyEachVisit}"> Chaque visite réussie</label>
+            <label for="notifyThreshold">Seuil de visites (optionnel)</label>
+            <input id="notifyThreshold" type="number" min="1" th:field="*{notifyThreshold}">
+            <p class="error" th:errors="*{notifyThreshold}"></p>
+            <label th:each="c : ${channels}">
+                <input type="checkbox" th:field="*{notifyChannelIds}" th:value="${c.id}"> <span th:text="${c.enabled} ? ${c.name} : ${c.name} + ' (désactivé)'"></span>
+            </label>
+            <p class="error" th:errors="*{notifyChannelIds}"></p>
+        </fieldset>
+        <fieldset>
             <legend>Aperçu (Discord, Slack…)</legend>
             <label for="metaMode">Source</label>
             <select id="metaMode" th:field="*{metaMode}">
