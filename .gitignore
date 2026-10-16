@@ -37,4 +37,4 @@ out/
 .vscode/
 
 ### Blinder runtime data ###
-data/
+/data/
