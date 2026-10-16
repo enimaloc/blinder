@@ -12,6 +12,7 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
+import org.hamcrest.Matchers;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
@@ -65,8 +66,8 @@ class SetupFlowTest {
     void setupFormPrefillsCurrentHost() throws Exception {
         mvc.perform(get("http://go.example.com/_/setup"))
                 .andExpect(status().isOk())
-                .andExpect(model().attribute("form", org.hamcrest.Matchers.hasProperty("host",
-                        org.hamcrest.Matchers.equalTo("go.example.com"))));
+                .andExpect(model().attribute("form", Matchers.hasProperty("host",
+                        Matchers.equalTo("go.example.com"))));
     }
 
     @Test

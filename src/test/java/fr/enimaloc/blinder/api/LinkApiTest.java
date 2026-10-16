@@ -14,6 +14,7 @@ import fr.enimaloc.blinder.notification.TriggerType;
 import fr.enimaloc.blinder.support.TestData;
 import fr.enimaloc.blinder.tag.Tag;
 import fr.enimaloc.blinder.user.User;
+import org.hamcrest.Matchers;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -30,15 +31,16 @@ import org.springframework.transaction.support.TransactionTemplate;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
-import javax.imageio.ImageIO;
-import java.io.ByteArrayInputStream;
 import java.awt.image.BufferedImage;
+import java.io.ByteArrayInputStream;
+import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.util.UUID;
+import javax.imageio.ImageIO;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.contains;
+import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.hasSize;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
@@ -437,7 +439,7 @@ class LinkApiTest {
                         """.formatted(version)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.notifications.exhausted").value(true))
-                .andExpect(jsonPath("$.version").value(org.hamcrest.Matchers.greaterThan((int) version)));
+                .andExpect(jsonPath("$.version").value(Matchers.greaterThan((int) version)));
 
         mvc.perform(jsonBody(patch(BASE + "/" + id), """
                         {"targetUrl":"https://example.org/2","version":%d}
@@ -445,6 +447,34 @@ class LinkApiTest {
                 .andExpect(status().isConflict());
         assertThat(links.findById(UUID.fromString(id)).orElseThrow().getTargetUrl()).isEqualTo("https://example.org/1");
         assertThat(notifications.settingsFor(UUID.fromString(id)).orElseThrow().isOnExhausted()).isTrue();
+    }
+
+    @Test
+    void returnedVersionCanBeReusedForTheNextPatch() throws Exception {
+        MvcResult created = mvc.perform(jsonBody(post(BASE), """
+                        {"domainId":"%s","slug":"chain","targetUrl":"https://example.org/1"}
+                        """.formatted(domain.getId())))
+                .andExpect(status().isCreated()).andReturn();
+        String id = read(created).get("id").asString();
+
+        // Un PATCH qui change les notifications : la version renvoyée doit être la version courante en base.
+        MvcResult first = mvc.perform(jsonBody(patch(BASE + "/" + id), """
+                        {"notifications":{"exhausted":true},"version":%d}
+                        """.formatted(read(created).get("version").asLong())))
+                .andExpect(status().isOk()).andReturn();
+        long returned = read(first).get("version").asLong();
+        assertThat(returned).isEqualTo(links.findById(UUID.fromString(id)).orElseThrow().getVersion());
+
+        MvcResult second = mvc.perform(jsonBody(patch(BASE + "/" + id), """
+                        {"targetUrl":"https://example.org/2","version":%d}
+                        """.formatted(returned)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.targetUrl").value("https://example.org/2")).andReturn();
+
+        mvc.perform(jsonBody(patch(BASE + "/" + id), """
+                        {"enabled":false,"version":%d}
+                        """.formatted(read(second).get("version").asLong())))
+                .andExpect(status().isOk());
     }
 
     @Test
@@ -471,9 +501,9 @@ class LinkApiTest {
                  "expiresAt":"2026-10-25T02:30:00+02:00"}
                 """.formatted(domain.getId()));
         assertThat(links.findById(UUID.fromString(later)).orElseThrow().getExpiresAt())
-                .isEqualTo(java.time.Instant.parse("2026-10-25T01:30:00Z"));
+                .isEqualTo(Instant.parse("2026-10-25T01:30:00Z"));
         assertThat(links.findById(UUID.fromString(earlier)).orElseThrow().getExpiresAt())
-                .isEqualTo(java.time.Instant.parse("2026-10-25T00:30:00Z"));
+                .isEqualTo(Instant.parse("2026-10-25T00:30:00Z"));
 
         // PUT explicite sur la seconde occurrence d'un lien qui était sur la première.
         mvc.perform(jsonBody(put(BASE + "/" + earlier), """
@@ -483,7 +513,7 @@ class LinkApiTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.expiresAt").value("2026-10-25T02:30:00+01:00"));
         assertThat(links.findById(UUID.fromString(earlier)).orElseThrow().getExpiresAt())
-                .isEqualTo(java.time.Instant.parse("2026-10-25T01:30:00Z"));
+                .isEqualTo(Instant.parse("2026-10-25T01:30:00Z"));
     }
 
     @Test
@@ -492,7 +522,7 @@ class LinkApiTest {
                 {"domainId":"%s","slug":"keepdst","targetUrl":"https://example.org/k"}
                 """.formatted(domain.getId()));
         Link link = links.findById(UUID.fromString(id)).orElseThrow();
-        link.setExpiresAt(java.time.Instant.parse("2026-10-25T01:30:00Z"));
+        link.setExpiresAt(Instant.parse("2026-10-25T01:30:00Z"));
         link = data.save(link);
         fired.saveAndFlush(new FiredTrigger(link, TriggerType.EXPIRED));
 
@@ -500,7 +530,7 @@ class LinkApiTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.expiresAt").value("2026-10-25T02:30:00+01:00"));
         assertThat(links.findById(UUID.fromString(id)).orElseThrow().getExpiresAt())
-                .isEqualTo(java.time.Instant.parse("2026-10-25T01:30:00Z"));
+                .isEqualTo(Instant.parse("2026-10-25T01:30:00Z"));
         assertThat(fired.findAll()).extracting(FiredTrigger::getTriggerType).containsExactly(TriggerType.EXPIRED);
 
         // Même valeur renvoyée telle quelle par un PUT.
@@ -510,7 +540,7 @@ class LinkApiTest {
                         """.formatted(domain.getId())))
                 .andExpect(status().isOk());
         assertThat(links.findById(UUID.fromString(id)).orElseThrow().getExpiresAt())
-                .isEqualTo(java.time.Instant.parse("2026-10-25T01:30:00Z"));
+                .isEqualTo(Instant.parse("2026-10-25T01:30:00Z"));
         assertThat(fired.findAll()).extracting(FiredTrigger::getTriggerType).containsExactly(TriggerType.EXPIRED);
     }
 
@@ -590,8 +620,8 @@ class LinkApiTest {
     @Test
     void resetClearsUseCount() throws Exception {
         Link link = data.link(domain, "used", "https://example.org/u");
-        transactions.executeWithoutResult(s -> links.consume(link.getId(), java.time.Instant.now()));
-        transactions.executeWithoutResult(s -> links.consume(link.getId(), java.time.Instant.now()));
+        transactions.executeWithoutResult(s -> links.consume(link.getId(), Instant.now()));
+        transactions.executeWithoutResult(s -> links.consume(link.getId(), Instant.now()));
         mvc.perform(auth(get(BASE + "/" + link.getId()))).andExpect(jsonPath("$.useCount").value(2));
         mvc.perform(auth(post(BASE + "/" + link.getId() + "/reset"))).andExpect(status().isNoContent());
         mvc.perform(auth(get(BASE + "/" + link.getId()))).andExpect(jsonPath("$.useCount").value(0));

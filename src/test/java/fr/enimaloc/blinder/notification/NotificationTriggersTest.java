@@ -28,6 +28,9 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 import java.util.function.Consumer;
+import java.time.LocalDateTime;
+import org.mockito.ArgumentMatchers;
+import org.mockito.Mockito;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -176,7 +179,7 @@ class NotificationTriggersTest {
         assertThat(sent(TriggerType.EXPIRED)).hasSize(1);
 
         form = linkService.toForm(linkService.get(admin, link.getId()));
-        form.setExpiresAt(java.time.LocalDateTime.now().minusDays(1));
+        form.setExpiresAt(LocalDateTime.now().minusDays(1));
         linkService.update(admin, link.getId(), form);
         triggers.onVisits(List.of(visit(VisitOutcome.DENIED, DenyReason.EXPIRED, Instant.now())));
         assertThat(sent(TriggerType.EXPIRED)).hasSize(2);
@@ -250,10 +253,10 @@ class NotificationTriggersTest {
         Visit other = visits.saveAndFlush(new Visit(links.getReferenceById(second.getId()), admin, Instant.now(),
                 VisitOutcome.REDIRECTED, null, "GET", false, "203.0.113.9", "ua", null, null, null, null, null, null));
         UUID failing = link.getId();
-        org.mockito.Mockito.doThrow(new IllegalStateException("boom")).when(deliveryService)
-                .enqueue(org.mockito.ArgumentMatchers.argThat(l -> l != null && l.getId().equals(failing)),
-                        org.mockito.ArgumentMatchers.eq(TriggerType.VISIT), org.mockito.ArgumentMatchers.any(),
-                        org.mockito.ArgumentMatchers.any());
+        Mockito.doThrow(new IllegalStateException("boom")).when(deliveryService)
+                .enqueue(ArgumentMatchers.argThat(l -> l != null && l.getId().equals(failing)),
+                        ArgumentMatchers.eq(TriggerType.VISIT), ArgumentMatchers.any(),
+                        ArgumentMatchers.any());
 
         triggers.onVisits(List.of(first, other));
 

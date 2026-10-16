@@ -22,6 +22,8 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
 import java.util.UUID;
+import fr.enimaloc.blinder.notification.NotificationChannelRepository;
+import org.hamcrest.Matchers;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
@@ -47,7 +49,7 @@ class LinkNotificationAdminTest {
     @Autowired
     LinkNotificationSettingsRepository settings;
     @Autowired
-    fr.enimaloc.blinder.notification.NotificationChannelRepository channelRepo;
+    NotificationChannelRepository channelRepo;
 
     User admin;
     Domain domain;
@@ -200,9 +202,9 @@ class LinkNotificationAdminTest {
     void createWarnsWhenAnAlertIsCheckedWithoutAnyChannel() throws Exception {
         mvc.perform(createLink("w1").param("notifyExpired", "true"))
                 .andExpect(redirectedUrl("/_/"))
-                .andExpect(flash().attribute("warning", org.hamcrest.Matchers.containsString(NO_CHANNEL)));
+                .andExpect(flash().attribute("warning", Matchers.containsString(NO_CHANNEL)));
         mvc.perform(createLink("w2").param("notifyThreshold", "3"))
-                .andExpect(flash().attribute("warning", org.hamcrest.Matchers.containsString(NO_CHANNEL)));
+                .andExpect(flash().attribute("warning", Matchers.containsString(NO_CHANNEL)));
     }
 
     @Test
@@ -211,7 +213,7 @@ class LinkNotificationAdminTest {
         off.setEnabled(false);
         channelRepo.saveAndFlush(off);
         mvc.perform(createLink("w3").param("notifyDenials", "true").param("notifyChannelIds", off.getId().toString()))
-                .andExpect(flash().attribute("warning", org.hamcrest.Matchers.containsString(NO_CHANNEL)));
+                .andExpect(flash().attribute("warning", Matchers.containsString(NO_CHANNEL)));
     }
 
     @Test
@@ -233,6 +235,6 @@ class LinkNotificationAdminTest {
                         .param("metaMode", "NONE").param("notifyExhausted", "true")
                         .param("version", String.valueOf(link.getVersion())))
                 .andExpect(redirectedUrl("/_/"))
-                .andExpect(flash().attribute("warning", org.hamcrest.Matchers.containsString(NO_CHANNEL)));
+                .andExpect(flash().attribute("warning", Matchers.containsString(NO_CHANNEL)));
     }
 }

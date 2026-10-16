@@ -1,8 +1,8 @@
 package fr.enimaloc.blinder.common;
 
 import org.junit.jupiter.api.Test;
-
-import java.util.Optional;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -207,16 +207,16 @@ class IpLiteralsTest {
         assertThat(result.get().length).isEqualTo(16); // Returns 16 bytes, not 4
     }
 
-    @org.junit.jupiter.params.ParameterizedTest
-    @org.junit.jupiter.params.provider.ValueSource(strings = {"a:b", ":::", "1.2.3.4:5", "::1.2.3.256", "dead:beef",
+    @ParameterizedTest
+    @ValueSource(strings = {"a:b", ":::", "1.2.3.4:5", "::1.2.3.256", "dead:beef",
             "010.0.0.1", "1.2.3.4::", "1.2.3.4::5", "1.2.3.4:1::", "\u0661.2.3.4", "12345::1",
             "1:2:3:4:5:6:7:8:9", "1:2:3:4:5:6:7", "fe80::1%eth0", "[::1]", "::/0", "1::2::3", "1:2:3:4:5:6:7:8::"})
     void rejectsMalformed(String literal) {
         assertThat(IpLiterals.parse(literal)).isEmpty();
     }
 
-    @org.junit.jupiter.params.ParameterizedTest
-    @org.junit.jupiter.params.provider.ValueSource(strings = {"::ffff:192.0.2.1", "0:0:0:0:0:ffff:192.0.2.1", "::ffff:c000:201"})
+    @ParameterizedTest
+    @ValueSource(strings = {"::ffff:192.0.2.1", "0:0:0:0:0:ffff:192.0.2.1", "::ffff:c000:201"})
     void ipv4MappedYieldsFourBytes(String literal) {
         assertThat(IpLiterals.parse(literal).get()).isEqualTo(new byte[] {(byte) 192, 0, 2, 1});
     }

@@ -1,7 +1,6 @@
 package fr.enimaloc.blinder.security;
 
 import fr.enimaloc.blinder.support.TestData;
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -32,12 +31,6 @@ class AdminDomainRealContainerTest {
     TestData data;
 
     HttpClient client;
-
-    @BeforeAll
-    static void allowHostHeader() {
-        // À positionner avant la première création d'un HttpClient dans la JVM.
-        System.setProperty("jdk.httpclient.allowRestrictedHeaders", "host");
-    }
 
     @BeforeEach
     void setUp() {

@@ -22,6 +22,9 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
 import java.util.Optional;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+import org.hamcrest.Matchers;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
@@ -93,7 +96,7 @@ class LinkPreviewAdminTest {
                 .andExpect(redirectedUrl("/_/"));
         assertThat(previews.findByLinkId(saved.getId()).filter(p -> p.getStatus() == PreviewStatus.OK)).isEmpty();
         mvc.perform(get("http://go.example.com/chg").header("User-Agent", "Discordbot/2.0"))
-                .andExpect(content().string(org.hamcrest.Matchers.not(containsString("Titre A"))));
+                .andExpect(content().string(Matchers.not(containsString("Titre A"))));
     }
 
     @Test
@@ -113,8 +116,8 @@ class LinkPreviewAdminTest {
         link.setMetaMode(MetaMode.PASSTHROUGH);
         Link saved = data.save(link);
         var preview = data.preview(saved, "Titre", null, null, PreviewStatus.OK);
-        String expected = java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm")
-                .format(preview.getFetchedAt().atZone(java.time.ZoneId.of("UTC")));
+        String expected = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm")
+                .format(preview.getFetchedAt().atZone(ZoneId.of("UTC")));
         mvc.perform(get("/_/links/{id}", saved.getId()).with(asAdmin))
                 .andExpect(content().string(containsString("le " + expected)));
     }

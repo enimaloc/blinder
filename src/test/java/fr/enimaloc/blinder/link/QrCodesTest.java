@@ -6,6 +6,7 @@ import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import io.nayuki.qrcodegen.QrCode;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -26,8 +27,8 @@ class QrCodesTest {
         assertThat(image.getWidth()).isEqualTo(300);
         assertThat(image.getHeight()).isEqualTo(300);
         assertThat(image.getRGB(0, 0) & 0xFFFFFF).isEqualTo(0xFFFFFF);
-        int modules = io.nayuki.qrcodegen.QrCode.encodeText("http://go.example.com/promo",
-                io.nayuki.qrcodegen.QrCode.Ecc.MEDIUM).size + 8;
+        int modules = QrCode.encodeText("http://go.example.com/promo",
+                QrCode.Ecc.MEDIUM).size + 8;
         int scale = 300 / modules;
         int offset = (300 - scale * modules) / 2;
         int corner = offset + 4 * scale + scale / 2;

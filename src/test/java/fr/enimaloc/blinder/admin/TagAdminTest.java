@@ -20,6 +20,8 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import java.util.List;
+import java.util.UUID;
 import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -71,7 +73,7 @@ class TagAdminTest {
                 .param("metaMode", "NONE");
     }
 
-    private java.util.List<String> tagNames(Link link) {
+    private List<String> tagNames(Link link) {
         return transactions.execute(s -> links.findById(link.getId()).orElseThrow().getTags().stream()
                 .map(Tag::getName).sorted().toList());
     }
@@ -154,7 +156,7 @@ class TagAdminTest {
         Tag theirs = data.tag(data.admin("other"), "promo");
         mvc.perform(createLink("a").param("tags", "promo"));
         Link link = links.findAll().getFirst();
-        java.util.List<java.util.UUID> ids = transactions.execute(s -> links.findById(link.getId()).orElseThrow()
+        List<UUID> ids = transactions.execute(s -> links.findById(link.getId()).orElseThrow()
                 .getTags().stream().map(Tag::getId).toList());
         assertThat(ids).doesNotContain(theirs.getId()).hasSize(1);
     }

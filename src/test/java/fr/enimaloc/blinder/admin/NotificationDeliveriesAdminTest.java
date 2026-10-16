@@ -19,6 +19,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
 import java.time.Instant;
+import fr.enimaloc.blinder.notification.NotificationChannelRepository;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
@@ -44,7 +45,7 @@ class NotificationDeliveriesAdminTest {
     @Autowired
     NotificationDeliveryRepository deliveries;
     @Autowired
-    fr.enimaloc.blinder.notification.NotificationChannelRepository channels;
+    NotificationChannelRepository channels;
 
     User admin;
     User other;

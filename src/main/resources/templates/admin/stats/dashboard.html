@@ -68,7 +68,7 @@
         <tr th:if="${view.recent().isEmpty()}"><td colspan="7" class="notice">Aucune visite sur la période.</td></tr>
     </table>
 </main>
-<script th:src="@{/_/vendor/chart.js/4.5.1/dist/chart.umd.js}"></script>
+<script th:src="@{/_/vendor/chart.js/dist/chart.umd.js}"></script>
 <script th:inline="javascript">
     const data = /*[[${chart}]]*/ {labels: [], redirected: [], refused: [], other: []};
     new Chart(document.getElementById('daily'), {

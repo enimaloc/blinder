@@ -1,5 +1,6 @@
 package fr.enimaloc.blinder.persistence;
 
+import fr.enimaloc.blinder.access.DenyReason;
 import fr.enimaloc.blinder.api.token.ApiToken;
 import fr.enimaloc.blinder.api.token.ApiTokenRepository;
 import fr.enimaloc.blinder.device.Device;
@@ -7,20 +8,23 @@ import fr.enimaloc.blinder.device.DeviceCredentialRepository;
 import fr.enimaloc.blinder.device.DeviceEnrollmentRepository;
 import fr.enimaloc.blinder.device.DeviceRepository;
 import fr.enimaloc.blinder.device.DeviceRow;
+import fr.enimaloc.blinder.device.DeviceService;
 import fr.enimaloc.blinder.device.DeviceTokens;
 import fr.enimaloc.blinder.domain.Domain;
-import fr.enimaloc.blinder.access.DenyReason;
 import fr.enimaloc.blinder.link.Link;
+import fr.enimaloc.blinder.link.LinkEditService;
+import fr.enimaloc.blinder.link.LinkForm;
 import fr.enimaloc.blinder.link.LinkRepository;
 import fr.enimaloc.blinder.link.LinkService;
 import fr.enimaloc.blinder.link.MetaMode;
+import fr.enimaloc.blinder.link.UsageCounter;
 import fr.enimaloc.blinder.link.preview.LinkPreviewRepository;
 import fr.enimaloc.blinder.link.preview.PreviewStatus;
-import fr.enimaloc.blinder.link.UsageCounter;
 import fr.enimaloc.blinder.notification.ChannelType;
 import fr.enimaloc.blinder.notification.DeliveryStatus;
 import fr.enimaloc.blinder.notification.FiredTrigger;
 import fr.enimaloc.blinder.notification.FiredTriggerRepository;
+import fr.enimaloc.blinder.notification.LinkNotificationService;
 import fr.enimaloc.blinder.notification.LinkNotificationSettings;
 import fr.enimaloc.blinder.notification.LinkNotificationSettingsRepository;
 import fr.enimaloc.blinder.notification.NotificationChannel;
@@ -28,6 +32,9 @@ import fr.enimaloc.blinder.notification.NotificationChannelRepository;
 import fr.enimaloc.blinder.notification.NotificationDelivery;
 import fr.enimaloc.blinder.notification.NotificationDeliveryRepository;
 import fr.enimaloc.blinder.notification.TriggerType;
+import fr.enimaloc.blinder.stats.StatsPeriod;
+import fr.enimaloc.blinder.stats.StatsQuery;
+import fr.enimaloc.blinder.stats.StatsScope;
 import fr.enimaloc.blinder.stats.Visit;
 import fr.enimaloc.blinder.stats.VisitDailyStat;
 import fr.enimaloc.blinder.stats.VisitDailyStatRepository;
@@ -36,7 +43,13 @@ import fr.enimaloc.blinder.stats.VisitRepository;
 import fr.enimaloc.blinder.support.TestData;
 import fr.enimaloc.blinder.tag.Tag;
 import fr.enimaloc.blinder.tag.TagRepository;
+import fr.enimaloc.blinder.tag.TagService;
 import fr.enimaloc.blinder.user.User;
+import fr.enimaloc.blinder.user.UserRepository;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
+import org.assertj.core.groups.Tuple;
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -47,23 +60,21 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import java.io.StringWriter;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
-import java.time.Duration;
-import java.io.StringWriter;
-import java.time.Instant;
-import java.time.LocalDate;
-import java.util.Set;
-import jakarta.persistence.EntityManager;
-import jakarta.persistence.PersistenceContext;
-
-import java.util.UUID;
-import java.time.temporal.ChronoUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -109,11 +120,11 @@ abstract class AbstractPersistenceTest {
     ApiTokenRepository apiTokens;
 
     @Autowired
-    fr.enimaloc.blinder.stats.StatsQuery statsQuery;
+    StatsQuery statsQuery;
     @Autowired
-    fr.enimaloc.blinder.tag.TagService tagService;
+    TagService tagService;
     @Autowired
-    fr.enimaloc.blinder.user.UserRepository users;
+    UserRepository users;
     @PersistenceContext
     EntityManager entityManager;
 
@@ -123,11 +134,11 @@ abstract class AbstractPersistenceTest {
     @Autowired
     LinkService linkService;
     @Autowired
-    fr.enimaloc.blinder.link.LinkEditService linkEdits;
+    LinkEditService linkEdits;
     @Autowired
-    fr.enimaloc.blinder.notification.LinkNotificationService linkNotifications;
+    LinkNotificationService linkNotifications;
     @Autowired
-    fr.enimaloc.blinder.device.DeviceService deviceService;
+    DeviceService deviceService;
 
     User owner;
     Domain domain;
@@ -173,7 +184,7 @@ abstract class AbstractPersistenceTest {
     void notificationOnlyEditBumpsLinkVersion() {
         Link link = data.link(domain, "notif", "https://example.com/n");
         long before = links.findById(link.getId()).orElseThrow().getVersion();
-        fr.enimaloc.blinder.link.LinkForm form = new fr.enimaloc.blinder.link.LinkForm();
+        LinkForm form = new LinkForm();
         form.setDomainId(domain.getId());
         form.setSlug("notif");
         form.setTargetUrl("https://example.com/n");
@@ -286,7 +297,7 @@ abstract class AbstractPersistenceTest {
 
     @Test
     void entityUpdateDoesNotOverwriteConcurrentlyCountedUsage() throws Exception {
-        org.junit.jupiter.api.Assumptions.assumeTrue(supportsOverlappingTransactions());
+        Assumptions.assumeTrue(supportsOverlappingTransactions());
         Link created = new Link(domain, "race", "https://example.com/a", owner);
         created.setMaxUses(1);
         data.save(created);
@@ -414,7 +425,7 @@ abstract class AbstractPersistenceTest {
         Device device = data.device(owner, "Laptop");
         data.credential(device, domain);
         assertThatThrownBy(() -> data.credential(device, domain))
-                .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
+                .isInstanceOf(DataIntegrityViolationException.class);
     }
 
     @Test
@@ -511,7 +522,7 @@ abstract class AbstractPersistenceTest {
         LinkNotificationSettings settings = new LinkNotificationSettings(links.getReferenceById(link.getId()));
         settings.setOnExhausted(true);
         settings.setVisitThreshold(5);
-        settings.setChannels(new java.util.HashSet<>(Set.of(channel)));
+        settings.setChannels(new HashSet<>(Set.of(channel)));
         settingsRepository.saveAndFlush(settings);
 
         FiredTrigger fired = new FiredTrigger(links.getReferenceById(link.getId()), TriggerType.EXHAUSTED);
@@ -547,6 +558,44 @@ abstract class AbstractPersistenceTest {
     }
 
     @Test
+    void pendingOnceTriggerQueriesSelectEnabledLinksWithActiveChannelAndNoFiredTrigger() {
+        NotificationChannel active = data.channel(owner, "Actif", ChannelType.WEBHOOK, "https://hooks.example/a");
+        NotificationChannel off = data.channel(owner, "Coupé", ChannelType.WEBHOOK, "https://hooks.example/b");
+        off.setEnabled(false);
+        channels.saveAndFlush(off);
+
+        Link ok = pendingLink("ok", active, true);
+        pendingLink("nochan", off, true);
+        pendingLink("disabled", active, false);
+        Link fired = pendingLink("fired", active, true);
+        firedTriggers.saveAndFlush(new FiredTrigger(links.getReferenceById(fired.getId()), TriggerType.EXPIRED));
+        firedTriggers.saveAndFlush(new FiredTrigger(links.getReferenceById(fired.getId()), TriggerType.EXHAUSTED));
+        firedTriggers.saveAndFlush(new FiredTrigger(links.getReferenceById(fired.getId()), TriggerType.THRESHOLD));
+
+        assertThat(settingsRepository.findByOnExpiredTrue()).extracting(s -> s.getLink().getId())
+                .containsExactly(ok.getId());
+        assertThat(settingsRepository.findExhaustedPending()).extracting(s -> s.getLink().getId())
+                .containsExactly(ok.getId());
+        assertThat(settingsRepository.findThresholdPending()).extracting(s -> s.getLink().getId())
+                .containsExactly(ok.getId());
+    }
+
+    private Link pendingLink(String slug, NotificationChannel channel, boolean enabled) {
+        Link link = new Link(domain, slug, "https://example.com", owner);
+        link.setMaxUses(1);
+        link.setUseCount(1);
+        link.setEnabled(enabled);
+        link = data.save(link);
+        LinkNotificationSettings settings = new LinkNotificationSettings(links.getReferenceById(link.getId()));
+        settings.setOnExpired(true);
+        settings.setOnExhausted(true);
+        settings.setVisitThreshold(1);
+        settings.setChannels(new HashSet<>(Set.of(channel)));
+        settingsRepository.saveAndFlush(settings);
+        return link;
+    }
+
+    @Test
     void deletingALinkCascadesStatsAndSettings() {
         Link link = data.link(domain, "casc", "https://example.com");
         Link ref = links.getReferenceById(link.getId());
@@ -554,7 +603,7 @@ abstract class AbstractPersistenceTest {
         data.visit(link, VisitOutcome.REDIRECTED, Instant.now(), "203.0.113.1");
         dailyStats.saveAndFlush(new VisitDailyStat(ref, owner, LocalDate.of(2026, 10, 16), VisitOutcome.REDIRECTED));
         LinkNotificationSettings settings = new LinkNotificationSettings(ref);
-        settings.setChannels(new java.util.HashSet<>(Set.of(channel)));
+        settings.setChannels(new HashSet<>(Set.of(channel)));
         settingsRepository.saveAndFlush(settings);
         firedTriggers.saveAndFlush(new FiredTrigger(ref, TriggerType.EXPIRED));
         NotificationDelivery delivery = deliveries.saveAndFlush(new NotificationDelivery(owner, channel, link.getId(),
@@ -590,17 +639,17 @@ abstract class AbstractPersistenceTest {
         Instant now = Instant.now().minusSeconds(60);
         data.visit(link, VisitOutcome.REDIRECTED, now, "203.0.113.1");
         data.visit(link, VisitOutcome.DENIED, now, "203.0.113.1");
-        var period = fr.enimaloc.blinder.stats.StatsPeriod.D7;
+        var period = StatsPeriod.D7;
 
-        assertThat(statsQuery.totals(owner, fr.enimaloc.blinder.stats.StatsScope.all(), period).total()).isEqualTo(2);
-        assertThat(statsQuery.totals(owner, fr.enimaloc.blinder.stats.StatsScope.link(link.getId()), period).uniqueIps()).isEqualTo(1);
-        assertThat(statsQuery.topCountries(owner, fr.enimaloc.blinder.stats.StatsScope.all(), period)).hasSize(1);
-        assertThat(statsQuery.topReferers(owner, fr.enimaloc.blinder.stats.StatsScope.link(link.getId()), period)).hasSize(1);
-        assertThat(statsQuery.topLinks(owner, fr.enimaloc.blinder.stats.StatsScope.all(), period)).hasSize(1);
-        assertThat(statsQuery.recent(owner, fr.enimaloc.blinder.stats.StatsScope.all(), period, 50)).hasSize(2);
-        assertThat(statsQuery.daily(owner, fr.enimaloc.blinder.stats.StatsScope.link(link.getId()), period)).hasSize(7);
+        assertThat(statsQuery.totals(owner, StatsScope.all(), period).total()).isEqualTo(2);
+        assertThat(statsQuery.totals(owner, StatsScope.link(link.getId()), period).uniqueIps()).isEqualTo(1);
+        assertThat(statsQuery.topCountries(owner, StatsScope.all(), period)).hasSize(1);
+        assertThat(statsQuery.topReferers(owner, StatsScope.link(link.getId()), period)).hasSize(1);
+        assertThat(statsQuery.topLinks(owner, StatsScope.all(), period)).hasSize(1);
+        assertThat(statsQuery.recent(owner, StatsScope.all(), period, 50)).hasSize(2);
+        assertThat(statsQuery.daily(owner, StatsScope.link(link.getId()), period)).hasSize(7);
         StringWriter csv = new StringWriter();
-        statsQuery.exportCsv(owner, fr.enimaloc.blinder.stats.StatsScope.all(), period, csv);
+        statsQuery.exportCsv(owner, StatsScope.all(), period, csv);
         assertThat(csv.toString().split("\r\n")).hasSize(3);
     }
 
@@ -771,7 +820,8 @@ abstract class AbstractPersistenceTest {
         NotificationChannel hook = data.channel(owner, "hook", ChannelType.WEBHOOK, "https://hooks.example/a");
         LinkNotificationSettings settings = new LinkNotificationSettings(links.getReferenceById(second.getId()));
         settings.setOnExpired(true);
-        settings.setChannels(new java.util.HashSet<>(Set.of(hook)));
+        NotificationChannel backup = data.channel(owner, "backup", ChannelType.WEBHOOK, "https://hooks.example/b");
+        settings.setChannels(new HashSet<>(Set.of(hook, backup)));
         settingsRepository.saveAndFlush(settings);
         // Lien d'un autre propriétaire glissé dans la liste : ni ses appareils ni ses réglages ne sortent.
         User stranger = data.admin("stranger");
@@ -791,7 +841,9 @@ abstract class AbstractPersistenceTest {
         assertThat(settingsByLink).containsOnlyKeys(second.getId());
         assertThat(settingsByLink.get(second.getId()).isOnExpired()).isTrue();
         assertThat(settingsByLink.get(second.getId()).getChannels()).extracting(NotificationChannel::getId)
-                .containsExactly(hook.getId());
+                .containsExactlyInAnyOrder(hook.getId(), backup.getId());
+        // Deux canaux = deux lignes de jointure : sans distinct, Hibernate doit toujours rendre un seul réglage.
+        assertThat(settingsRepository.findWithChannelsByOwnerAndLinkIdIn(owner, ids)).hasSize(1);
     }
 
     @Test
@@ -805,7 +857,7 @@ abstract class AbstractPersistenceTest {
         data.credential(data.device(stranger, "foreign"), data.domain("foreign.example.com", stranger));
 
         assertThat(deviceService.list(owner)).extracting(r -> r.device().getName(), DeviceRow::domainCount)
-                .containsExactly(org.assertj.core.groups.Tuple.tuple("laptop", 0L),
-                        org.assertj.core.groups.Tuple.tuple("phone", 2L));
+                .containsExactly(Tuple.tuple("laptop", 0L),
+                        Tuple.tuple("phone", 2L));
     }
 }

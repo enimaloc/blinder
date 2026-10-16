@@ -14,6 +14,7 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
+import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
@@ -49,7 +50,7 @@ class NotificationChannelAdminTest {
         asAdmin = user(new BlinderUserDetails(admin));
     }
 
-    private org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder create(String type, String target) {
+    private MockHttpServletRequestBuilder create(String type, String target) {
         return post("/_/notifications/channels").with(asAdmin).with(csrf())
                 .param("name", "Mon canal").param("type", type).param("target", target)
                 .param("enabled", "true");

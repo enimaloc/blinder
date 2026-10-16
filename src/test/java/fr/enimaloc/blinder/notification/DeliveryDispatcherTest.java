@@ -16,6 +16,9 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
+import fr.enimaloc.blinder.common.FieldErrorException;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -41,12 +44,12 @@ class DeliveryDispatcherTest {
     final AtomicReference<Instant> clockNow = new AtomicReference<>(t0);
     final Clock clock = new Clock() {
         @Override
-        public java.time.ZoneId getZone() {
-            return java.time.ZoneOffset.UTC;
+        public ZoneId getZone() {
+            return ZoneOffset.UTC;
         }
 
         @Override
-        public Clock withZone(java.time.ZoneId zone) {
+        public Clock withZone(ZoneId zone) {
             return this;
         }
 
@@ -207,7 +210,7 @@ class DeliveryDispatcherTest {
         channel.setEnabled(false);
         channels.saveAndFlush(channel);
         assertThatThrownBy(() -> deliveryService.enqueueTest(owner, channel.getId()))
-                .isInstanceOf(fr.enimaloc.blinder.common.FieldErrorException.class).hasMessage("Canal désactivé");
+                .isInstanceOf(FieldErrorException.class).hasMessage("Canal désactivé");
         assertThat(deliveries.findAll()).isEmpty();
     }
 

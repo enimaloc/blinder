@@ -26,6 +26,11 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Stream;
+import org.springframework.dao.DataAccessResourceFailureException;
+import org.springframework.transaction.CannotCreateTransactionException;
+import org.springframework.transaction.support.TransactionCallback;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -70,12 +75,12 @@ class VisitWriterTest {
                        VisitBatchListener... listeners) {
         ObjectProvider<VisitBatchListener> provider = new ObjectProvider<>() {
             @Override
-            public java.util.stream.Stream<VisitBatchListener> orderedStream() {
-                return java.util.stream.Stream.of(listeners);
+            public Stream<VisitBatchListener> orderedStream() {
+                return Stream.of(listeners);
             }
 
             @Override
-            public java.util.stream.Stream<VisitBatchListener> stream() {
+            public Stream<VisitBatchListener> stream() {
                 return orderedStream();
             }
         };
@@ -157,12 +162,12 @@ class VisitWriterTest {
 
     @Test
     void databaseOutageLogsOneTracePerBatchAndDropsItWhole() {
-        java.util.concurrent.atomic.AtomicInteger attempts = new java.util.concurrent.atomic.AtomicInteger();
+        AtomicInteger attempts = new AtomicInteger();
         TransactionTemplate down = new TransactionTemplate() {
             @Override
-            public <T> T execute(org.springframework.transaction.support.TransactionCallback<T> action) {
+            public <T> T execute(TransactionCallback<T> action) {
                 attempts.incrementAndGet();
-                throw new org.springframework.dao.DataAccessResourceFailureException("base indisponible");
+                throw new DataAccessResourceFailureException("base indisponible");
             }
         };
         ListAppender<ILoggingEvent> logs = new ListAppender<>();
@@ -192,12 +197,12 @@ class VisitWriterTest {
     @Test
     void connectionFailureIsTriedOnceDropsTheWholeBatchAndDoesNotStallTheWriter() {
         // Premier appel : pas de connexion (ce qui prendrait connectionTimeout par visite si on réessayait une à une).
-        java.util.concurrent.atomic.AtomicInteger attempts = new java.util.concurrent.atomic.AtomicInteger();
+        AtomicInteger attempts = new AtomicInteger();
         TransactionTemplate flaky = new TransactionTemplate(tx.getTransactionManager()) {
             @Override
-            public <T> T execute(org.springframework.transaction.support.TransactionCallback<T> action) {
+            public <T> T execute(TransactionCallback<T> action) {
                 if (attempts.incrementAndGet() == 1) {
-                    throw new org.springframework.transaction.CannotCreateTransactionException("pas de connexion");
+                    throw new CannotCreateTransactionException("pas de connexion");
                 }
                 return super.execute(action);
             }

@@ -32,6 +32,8 @@ dependencies {
     implementation("io.nayuki:qrcodegen:1.8.0")
     implementation("com.maxmind.geoip2:geoip2:5.2.0")
     implementation("org.webjars.npm:chart.js:4.5.1")
+    // Résout les ressources webjar sans numéro de version (version gérée par Spring Boot).
+    implementation("org.webjars:webjars-locator-lite")
     runtimeOnly("com.h2database:h2")
     runtimeOnly("org.postgresql:postgresql")
     runtimeOnly("org.xerial:sqlite-jdbc")
@@ -55,4 +57,6 @@ dependencies {
 
 tasks.withType<Test> {
     useJUnitPlatform()
+    // Lu une seule fois par la JVM à la création du premier HttpClient : autorise l'en-tête Host des tests en conteneur réel.
+    systemProperty("jdk.httpclient.allowRestrictedHeaders", "host")
 }

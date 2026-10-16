@@ -26,6 +26,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.UUID;
+import java.util.List;
 
 import static org.hamcrest.Matchers.hasSize;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -87,7 +88,7 @@ class StatsApiTest {
         stat.increment(1);
         VisitDailyStat plainStat = new VisitDailyStat(plain, admin, today, VisitOutcome.REDIRECTED);
         plainStat.increment(3);
-        dailyStats.saveAll(java.util.List.of(stat, plainStat));
+        dailyStats.saveAll(List.of(stat, plainStat));
     }
 
     private MockHttpServletRequestBuilder auth(MockHttpServletRequestBuilder b) {

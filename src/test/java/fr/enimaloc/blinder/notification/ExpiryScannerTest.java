@@ -3,6 +3,9 @@ package fr.enimaloc.blinder.notification;
 import fr.enimaloc.blinder.domain.Domain;
 import fr.enimaloc.blinder.link.Link;
 import fr.enimaloc.blinder.link.LinkRepository;
+import fr.enimaloc.blinder.stats.Visit;
+import fr.enimaloc.blinder.stats.VisitOutcome;
+import fr.enimaloc.blinder.stats.VisitRepository;
 import fr.enimaloc.blinder.support.TestData;
 import fr.enimaloc.blinder.user.User;
 import org.junit.jupiter.api.BeforeEach;
@@ -13,6 +16,8 @@ import org.springframework.context.annotation.Import;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
+import java.util.function.Consumer;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -34,6 +39,10 @@ class ExpiryScannerTest {
     NotificationDeliveryRepository deliveries;
     @Autowired
     FiredTriggerRepository firedRepo;
+    @Autowired
+    NotificationTriggers triggers;
+    @Autowired
+    VisitRepository visits;
 
     User admin;
     Domain domain;
@@ -47,7 +56,7 @@ class ExpiryScannerTest {
         hook = data.channel(admin, "hook", ChannelType.WEBHOOK, "https://example.com/h");
     }
 
-    Link link(String slug, boolean notify, java.util.function.Consumer<Link> config) {
+    Link link(String slug, boolean notify, Consumer<Link> config) {
         Link l = new Link(domain, slug, "https://example.com/t", admin);
         config.accept(l);
         l = data.save(l);
@@ -116,5 +125,35 @@ class ExpiryScannerTest {
         scanner.scan(NOW);
         assertThat(deliveries.count()).isEqualTo(1);
         assertThat(settingsRepo.findByOnExpiredTrue()).isEmpty();
+    }
+
+    @Test
+    void thresholdCrossingIsLeftToTheVisitPathAndTheSecondScanOnlyCatchesAMiss() {
+        Link crossed = link("crossed", false, l -> l.setUseCount(3));
+        LinkNotificationSettings s = settingsRepo.findByLinkId(crossed.getId()).orElseThrow();
+        s.setVisitThreshold(3);
+        settingsRepo.saveAndFlush(s);
+        Link served = link("served", false, l -> l.setUseCount(3));
+        s = settingsRepo.findByLinkId(served.getId()).orElseThrow();
+        s.setVisitThreshold(3);
+        settingsRepo.saveAndFlush(s);
+
+        scanner.scan(NOW);
+        assertThat(deliveries.count()).as("premier passage : on laisse la main au chemin des visites").isZero();
+
+        // Le chemin des visites rattrape « served » avec le détail de la visite.
+        Visit visit = visits.saveAndFlush(new Visit(links.getReferenceById(served.getId()), admin, NOW,
+                VisitOutcome.REDIRECTED, null, "GET", false, "203.0.113.9", "ua", null, null, null, null, null, null));
+        triggers.onVisits(List.of(visit));
+        assertThat(deliveries.findAll()).singleElement().satisfies(d -> {
+            assertThat(d.getEvent()).isEqualTo(TriggerType.THRESHOLD);
+            assertThat(d.getLinkLabel()).isEqualTo("go.example.com/served");
+        });
+
+        // « crossed » n'a pas été traité : le deuxième passage l'envoie, une seule fois.
+        scanner.scan(NOW.plusSeconds(60));
+        scanner.scan(NOW.plusSeconds(120));
+        assertThat(deliveries.findAll()).extracting(NotificationDelivery::getLinkLabel)
+                .containsExactlyInAnyOrder("go.example.com/served", "go.example.com/crossed");
     }
 }

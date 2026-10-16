@@ -14,6 +14,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
+import org.hamcrest.Matchers;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
@@ -57,7 +58,7 @@ class DomainAdminTest {
         mvc.perform(get("/_/domains").with(asAdmin))
                 .andExpect(status().isOk())
                 .andExpect(content().string(containsString("go.example.com")))
-                .andExpect(content().string(org.hamcrest.Matchers.not(containsString("theirs.example.com"))));
+                .andExpect(content().string(Matchers.not(containsString("theirs.example.com"))));
     }
 
     @Test

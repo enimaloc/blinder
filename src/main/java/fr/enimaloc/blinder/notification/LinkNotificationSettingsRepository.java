@@ -18,14 +18,31 @@ public interface LinkNotificationSettingsRepository extends JpaRepository<LinkNo
     @Query("select s from LinkNotificationSettings s left join fetch s.channels where s.link.id = :linkId")
     Optional<LinkNotificationSettings> findWithChannelsByLinkId(@Param("linkId") UUID linkId);
 
-    @Query("select distinct s from LinkNotificationSettings s left join fetch s.channels"
+    @Query("select s from LinkNotificationSettings s left join fetch s.channels"
             + " where s.link.id in :linkIds and s.link.owner = :owner")
     List<LinkNotificationSettings> findWithChannelsByOwnerAndLinkIdIn(@Param("owner") User owner,
                                                                       @Param("linkIds") Collection<UUID> linkIds);
 
     /** Liens dont l'expiration doit être notifiée et ne l'a pas déjà été. */
     @Query("select s from LinkNotificationSettings s join fetch s.link where s.onExpired = true "
+            + "and s.link.enabled = true and exists (select 1 from s.channels c where c.enabled = true) "
             + "and not exists (select 1 from FiredTrigger f where f.link = s.link "
             + "and f.triggerType = fr.enimaloc.blinder.notification.TriggerType.EXPIRED)")
     List<LinkNotificationSettings> findByOnExpiredTrue();
+
+    /** Liens épuisés dont l'épuisement doit être notifié et ne l'a pas déjà été. */
+    @Query("select s from LinkNotificationSettings s join fetch s.link l where s.onExhausted = true "
+            + "and l.maxUses is not null and l.useCount >= l.maxUses "
+            + "and l.enabled = true and exists (select 1 from s.channels c where c.enabled = true) "
+            + "and not exists (select 1 from FiredTrigger f where f.link = s.link "
+            + "and f.triggerType = fr.enimaloc.blinder.notification.TriggerType.EXHAUSTED)")
+    List<LinkNotificationSettings> findExhaustedPending();
+
+    /** Liens ayant atteint leur seuil de visites sans que l'alerte soit partie. */
+    @Query("select s from LinkNotificationSettings s join fetch s.link l where s.visitThreshold is not null "
+            + "and l.useCount >= s.visitThreshold "
+            + "and l.enabled = true and exists (select 1 from s.channels c where c.enabled = true) "
+            + "and not exists (select 1 from FiredTrigger f where f.link = s.link "
+            + "and f.triggerType = fr.enimaloc.blinder.notification.TriggerType.THRESHOLD)")
+    List<LinkNotificationSettings> findThresholdPending();
 }
