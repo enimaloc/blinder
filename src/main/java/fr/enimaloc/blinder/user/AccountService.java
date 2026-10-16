@@ -6,6 +6,8 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Objects;
+
 @Service
 @RequiredArgsConstructor
 public class AccountService {
@@ -14,14 +16,14 @@ public class AccountService {
     private final PasswordEncoder encoder;
 
     @Transactional
-    public void changePassword(User user, PasswordChangeForm form) {
+    public User changePassword(User user, PasswordChangeForm form) {
         if (!encoder.matches(form.getCurrentPassword(), user.getPasswordHash())) {
             throw new FieldErrorException("currentPassword", "Mot de passe actuel incorrect");
         }
-        if (!form.getNewPassword().equals(form.getConfirmPassword())) {
+        if (!Objects.equals(form.getNewPassword(), form.getConfirmPassword())) {
             throw new FieldErrorException("confirmPassword", "Les mots de passe ne correspondent pas");
         }
         user.setPasswordHash(encoder.encode(form.getNewPassword()));
-        users.save(user);
+        return users.save(user);
     }
 }

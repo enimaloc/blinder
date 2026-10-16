@@ -17,7 +17,11 @@ public class CurrentUser {
         if (auth == null || !(auth.getPrincipal() instanceof BlinderUserDetails details)) {
             throw new AuthenticationCredentialsNotFoundException("No Blinder user in security context");
         }
-        return users.findById(details.userId())
+        User user = users.findById(details.userId())
                 .orElseThrow(() -> new AuthenticationCredentialsNotFoundException("User no longer exists"));
+        if (!user.getPasswordHash().equals(details.getPassword())) {
+            throw new AuthenticationCredentialsNotFoundException("Credentials changed");
+        }
+        return user;
     }
 }

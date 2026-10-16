@@ -11,7 +11,9 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.mock.web.MockHttpSession;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestBuilders.formLogin;
@@ -100,5 +102,46 @@ class AuthAndAccountTest {
         mvc.perform(post("/_/account/password").with(user(new BlinderUserDetails(admin)))
                         .param("currentPassword", TestData.PASSWORD))
                 .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void missingNewPasswordIsAFieldErrorNotAServerError() throws Exception {
+        mvc.perform(post("/_/account/password").with(user(new BlinderUserDetails(admin))).with(csrf())
+                        .param("currentPassword", TestData.PASSWORD))
+                .andExpect(status().isOk())
+                .andExpect(model().attributeHasFieldErrors("form", "newPassword"));
+    }
+
+    @Test
+    void passwordChangeRevokesOtherSessionsButKeepsCurrent() throws Exception {
+        MockHttpSession current = login();
+        MockHttpSession older = login();
+        mvc.perform(get("/_/account").session(current)).andExpect(status().isOk());
+        mvc.perform(get("/_/account").session(older)).andExpect(status().isOk());
+
+        MvcResult changed = mvc.perform(post("/_/account/password").session(current).with(csrf())
+                        .param("currentPassword", TestData.PASSWORD)
+                        .param("newPassword", "a-brand-new-passphrase")
+                        .param("confirmPassword", "a-brand-new-passphrase"))
+                .andExpect(redirectedUrl("/_/account?changed"))
+                .andReturn();
+        MockHttpSession rotated = (MockHttpSession) changed.getRequest().getSession(false);
+
+        mvc.perform(get("/_/account").session(rotated)).andExpect(status().isOk());
+        mvc.perform(get("/_/account").session(older))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("/_/login"));
+
+        mvc.perform(formLogin("/_/login").user("admin").password(TestData.PASSWORD))
+                .andExpect(unauthenticated());
+        mvc.perform(formLogin("/_/login").user("admin").password("a-brand-new-passphrase"))
+                .andExpect(authenticated());
+    }
+
+    private MockHttpSession login() throws Exception {
+        MvcResult result = mvc.perform(formLogin("/_/login").user("admin").password(TestData.PASSWORD))
+                .andExpect(authenticated())
+                .andReturn();
+        return (MockHttpSession) result.getRequest().getSession(false);
     }
 }
