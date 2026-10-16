@@ -192,7 +192,7 @@ Tout autre changement (cible, tags, métadonnées, protections…) ne réarme ri
 | `blinder.notifications.denials.threshold` | `10` | Refus déclenchant l'alerte |
 | `blinder.notifications.denials.window` | `10m` | Fenêtre glissante de comptage des refus (en mémoire ; un lien sans refus récent est oublié) |
 | `blinder.notifications.denials.cooldown` | `1h` | Silence après une alerte de refus |
-| `blinder.notifications.trigger-lock-wait` | `2s` | Attente maximale du verrou d'une alerte « une seule fois » (`0` = pas d'attente, négatif refusé) ; au-delà, l'alerte est réévaluée à la minute suivante (expiration, épuisement, seuil) |
+| `blinder.notifications.trigger-lock-wait` | `2s` | Attente maximale du verrou d'une alerte « une seule fois » (`0` = pas d'attente, négatif refusé) ; au-delà, l'alerte est réévaluée par le scanner à la minute suivante (expiration, épuisement, seuil) |
 | `blinder.scheduling.enabled` | `true` | Active les tâches planifiées (purge, envois, expiration) |
 | `spring.mail.*` | vide | Serveur SMTP |
 
