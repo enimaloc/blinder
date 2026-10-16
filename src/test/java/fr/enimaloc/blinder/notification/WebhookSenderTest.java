@@ -2,6 +2,7 @@ package fr.enimaloc.blinder.notification;
 
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
+import fr.enimaloc.blinder.support.SlowDnsResolver;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -13,6 +14,7 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.HexFormat;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -147,6 +149,28 @@ class WebhookSenderTest {
         SendResult result = sender.send(channel, delivery(channel));
         assertThat(result.success()).isFalse();
         assertThat((System.nanoTime() - start) / 1_000_000_000.0).isLessThan(7.0);
+    }
+
+    @Test
+    void slowDnsResolutionIsAnOrdinaryQuickFailure() {
+        // Le résolveur simulé finit par répondre 127.0.0.1 : sans délai DNS, l'envoi réussirait au bout de 4 s.
+        WebhookSender slowDns = new WebhookSender(Clock.systemUTC(),
+                new SlowDnsResolver(Duration.ofSeconds(4)),
+                Duration.ofMillis(300));
+        try {
+            for (boolean allowPrivate : new boolean[]{true, false}) {
+                NotificationChannel channel = channel("http://slow.test:" + server.getAddress().getPort() + "/ok",
+                        allowPrivate);
+                long start = System.nanoTime();
+                SendResult result = slowDns.send(channel, delivery(channel));
+                assertThat(result.success()).isFalse();
+                assertThat(result.error()).contains("DNS");
+                assertThat((System.nanoTime() - start) / 1_000_000_000.0).isLessThan(2.0);
+            }
+            assertThat(hits.get()).isZero();
+        } finally {
+            slowDns.close();
+        }
     }
 
     @Test
