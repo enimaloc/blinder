@@ -1,6 +1,7 @@
 package fr.enimaloc.blinder.api;
 
 import fr.enimaloc.blinder.support.TestData;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -29,6 +30,13 @@ class ApiErrorRealContainerTest {
     TestData data;
 
     HttpClient client;
+
+    @BeforeAll
+    static void allowHostHeader() {
+        // Lu une seule fois par la JVM, à la création du premier HttpClient : les autres tests en conteneur réel
+        // (en-tête Host) en dépendent si cette classe passe avant elles.
+        System.setProperty("jdk.httpclient.allowRestrictedHeaders", "host");
+    }
 
     @BeforeEach
     void setUp() {
