@@ -5,6 +5,7 @@ import fr.enimaloc.blinder.link.Link;
 import fr.enimaloc.blinder.stats.Visit;
 import fr.enimaloc.blinder.user.User;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
@@ -16,6 +17,7 @@ import java.util.List;
 import java.util.UUID;
 
 /** Création des envois en file ; l'expédition elle-même est faite par le répartiteur. */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class DeliveryService {
@@ -25,6 +27,7 @@ public class DeliveryService {
     private final NotificationDeliveryRepository deliveries;
     private final FiredTriggerRepository fired;
     private final NotificationPayloads payloads;
+    private final TriggerLocks triggerLocks;
     private final Clock clock;
 
     @Transactional
@@ -87,12 +90,23 @@ public class DeliveryService {
         return found;
     }
 
-    /** « Une seule fois » : enregistre le déclencheur puis envoie ; {@code false} s'il avait déjà été déclenché. */
+    /**
+     * « Une seule fois » : enregistre le déclencheur puis envoie ; {@code false} s'il avait déjà été déclenché.
+     * Les appels concurrents pour le même (lien, type) — scanner d'expiration et écrivain de visites — sont
+     * sérialisés jusqu'à la fin de transaction : le second voit le déclencheur validé au lieu de violer l'unicité.
+     */
     @Transactional
     public boolean fireOnce(Link link, TriggerType event, Visit visitOrNull, Instant now,
                             NotificationPayloads.Details details) {
         // Sans canal actif on ne « consomme » pas le déclencheur : il partira quand un canal sera activé.
-        if (activeChannels(link).isEmpty() || fired.findByLinkIdAndTriggerType(link.getId(), event).isPresent()) {
+        if (activeChannels(link).isEmpty()) {
+            return false;
+        }
+        if (!triggerLocks.acquireForTransaction(link.getId(), event)) {
+            log.warn("Déclencheur {} du lien {} toujours verrouillé, reporté", event, link.getId());
+            return false;
+        }
+        if (fired.findByLinkIdAndTriggerType(link.getId(), event).isPresent()) {
             return false;
         }
         FiredTrigger trigger = new FiredTrigger(link, event);
