@@ -3,6 +3,7 @@ package fr.enimaloc.blinder.notification;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayDeque;
@@ -11,28 +12,50 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
-/** Fenêtre glissante en mémoire des refus par lien (perdue au redémarrage, c'est voulu). */
+/**
+ * Fenêtre glissante en mémoire des refus par lien (perdue au redémarrage, c'est voulu). Les liens dont tous les refus
+ * sont sortis de la fenêtre sont oubliés (purge au plus une fois par fenêtre, lors d'un enregistrement) et le nombre
+ * de liens suivis est borné : au-delà, le lien au dernier refus le plus ancien est évincé.
+ */
 @Component
 public class DenialWindow {
 
+    static final int MAX_TRACKED_LINKS = 10_000;
+
     private final int threshold;
     private final Duration window;
+    private final Clock clock;
+    private final int maxTrackedLinks;
     private final Map<UUID, Deque<Instant>> denials = new ConcurrentHashMap<>();
+    private volatile Instant nextPurge = Instant.MIN;
 
     @Autowired
-    public DenialWindow(NotificationProperties properties) {
-        this(properties.denials().threshold(), properties.denials().window());
+    public DenialWindow(NotificationProperties properties, Clock clock) {
+        this(properties.denials().threshold(), properties.denials().window(), clock, MAX_TRACKED_LINKS);
     }
 
     DenialWindow(int threshold, Duration window) {
+        this(threshold, window, Clock.systemUTC(), MAX_TRACKED_LINKS);
+    }
+
+    DenialWindow(int threshold, Duration window, Clock clock, int maxTrackedLinks) {
         this.threshold = threshold;
         this.window = window;
+        this.clock = clock;
+        this.maxTrackedLinks = maxTrackedLinks;
     }
 
     /**
      * Enregistre un refus ; {@code true} si le seuil est atteint dans la fenêtre (la fenêtre du lien est alors vidée).
      */
     public boolean record(UUID linkId, Instant at) {
+        Instant now = clock.instant();
+        if (!now.isBefore(nextPurge)) {
+            purge(now);
+        }
+        if (!denials.containsKey(linkId) && denials.size() >= maxTrackedLinks) {
+            makeRoom(now);
+        }
         boolean[] fired = new boolean[1];
         // compute() est atomique par clé : deux threads ne peuvent pas déclencher deux fois pour le même lot de refus.
         denials.compute(linkId, (id, instants) -> {
@@ -47,5 +70,44 @@ public class DenialWindow {
             return deque;
         });
         return fired[0];
+    }
+
+    /** Retire les liens dont le refus le plus récent est sorti de la fenêtre. */
+    private void purge(Instant now) {
+        nextPurge = now.plus(window);
+        Instant oldest = now.minus(window);
+        for (UUID linkId : denials.keySet()) {
+            denials.computeIfPresent(linkId, (id, deque) -> isStale(deque, oldest) ? null : deque);
+        }
+    }
+
+    private static boolean isStale(Deque<Instant> deque, Instant oldest) {
+        Instant last = deque.peekLast();
+        return last == null || last.isBefore(oldest);
+    }
+
+    /** Plafond atteint : purge forcée, puis éviction du lien au dernier refus le plus ancien si nécessaire. */
+    private void makeRoom(Instant now) {
+        purge(now);
+        while (denials.size() >= maxTrackedLinks) {
+            UUID victim = null;
+            Instant victimLast = null;
+            for (Map.Entry<UUID, Deque<Instant>> entry : denials.entrySet()) {
+                Instant last = entry.getValue().peekLast();
+                if (victim == null || last == null || last.isBefore(victimLast)) {
+                    victim = entry.getKey();
+                    victimLast = last == null ? Instant.MIN : last;
+                }
+            }
+            if (victim == null) {
+                return;
+            }
+            denials.remove(victim);
+        }
+    }
+
+    /** Nombre de liens suivis (tests). */
+    int trackedLinks() {
+        return denials.size();
     }
 }
