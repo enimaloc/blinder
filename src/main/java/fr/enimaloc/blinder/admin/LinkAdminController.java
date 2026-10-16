@@ -35,6 +35,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
 
@@ -205,12 +207,12 @@ public class LinkAdminController {
     }
 
     private static List<Tag> sortedTags(Link link) {
-        return link.getTags().stream().sorted(java.util.Comparator.comparing(Tag::getNameKey)).toList();
+        return link.getTags().stream().sorted(Comparator.comparing(Tag::getNameKey)).toList();
     }
 
     /** Avertissements d'après enregistrement, regroupés dans un seul message flash. */
     private void warn(RedirectAttributes flash, User owner, Link saved, LinkForm form) {
-        List<String> warnings = new java.util.ArrayList<>();
+        List<String> warnings = new ArrayList<>();
         if (saved.getMetaMode() == MetaMode.PASSTHROUGH && LinkService.isLimitedOrProtected(saved)) {
             warnings.add("Aperçu repris de la cible sur un lien limité ou protégé : "
                     + "son titre, sa description et son image sont visibles publiquement.");
