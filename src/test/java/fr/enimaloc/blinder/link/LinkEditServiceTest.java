@@ -119,6 +119,48 @@ class LinkEditServiceTest {
     }
 
     @Test
+    void notBeforeChangeRearmsExpiredOnly() {
+        LinkForm form = form();
+        form.setNotBefore(LocalDateTime.now().minusDays(1));
+        edits.update(admin, link.getId(), form);
+        assertThat(remaining()).containsExactlyInAnyOrder(TriggerType.EXHAUSTED, TriggerType.THRESHOLD);
+    }
+
+    @Test
+    void ttlChangeRearmsExpiredOnly() {
+        LinkForm form = form();
+        form.setTtlMinutes(60L);
+        edits.update(admin, link.getId(), form);
+        assertThat(remaining()).containsExactlyInAnyOrder(TriggerType.EXHAUSTED, TriggerType.THRESHOLD);
+    }
+
+    @Test
+    void switchingExpiredOnRearmsIt() {
+        LinkForm form = form();
+        form.setNotifyExpired(true);
+        edits.update(admin, link.getId(), form);
+        assertThat(remaining()).containsExactlyInAnyOrder(TriggerType.EXHAUSTED, TriggerType.THRESHOLD);
+
+        // déjà activée : une nouvelle sauvegarde identique ne réarme rien
+        fired.saveAndFlush(new FiredTrigger(linkRepo.findById(link.getId()).orElseThrow(), TriggerType.EXPIRED));
+        edits.update(admin, link.getId(), form);
+        assertThat(remaining()).containsExactlyInAnyOrderElementsOf(ALL);
+    }
+
+    @Test
+    void clearingTheThresholdRearmsIt() {
+        LinkForm form = form();
+        form.setNotifyThreshold(10);
+        edits.update(admin, link.getId(), form);
+        fired.saveAndFlush(new FiredTrigger(linkRepo.findById(link.getId()).orElseThrow(), TriggerType.THRESHOLD));
+        assertThat(remaining()).containsExactlyInAnyOrderElementsOf(ALL);
+
+        form.setNotifyThreshold(null);
+        edits.update(admin, link.getId(), form);
+        assertThat(remaining()).containsExactlyInAnyOrder(TriggerType.EXHAUSTED, TriggerType.EXPIRED);
+    }
+
+    @Test
     void resetRearmsAllThree() {
         edits.resetUsage(admin, link.getId());
         assertThat(remaining()).isEmpty();
