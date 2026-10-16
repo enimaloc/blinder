@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html lang="fr" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="robots" content="noindex">
+    <title>Erreur</title>
+</head>
+<body>
+<main>
+    <h1 th:text="${status} == 404 ? 'Introuvable' : 'Une erreur est survenue'">Une erreur est survenue</h1>
+    <p th:if="${status} != 404">Réessayez plus tard.</p>
+</main>
+</body>
+</html>
