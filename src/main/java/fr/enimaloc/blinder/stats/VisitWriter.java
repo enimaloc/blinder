@@ -6,6 +6,7 @@ import fr.enimaloc.blinder.link.LinkRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.SmartLifecycle;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -156,11 +157,29 @@ public class VisitWriter implements SmartLifecycle {
         try {
             return transactions.execute(status -> persist(enriched));
         } catch (Throwable t) {
-            // Typiquement un lien supprimé entre sa lecture et la validation : on isole la ou les visites fautives.
-            // Une seule trace complète par lot, même si la base est indisponible pour toutes ses visites.
-            log.error("Écriture d'un lot de {} visites impossible, nouvel essai visite par visite", enriched.size(), t);
-            return writeOneByOne(enriched);
+            if (isIntegrityViolation(t)) {
+                // Typiquement un lien supprimé entre sa lecture et la validation : on isole la ou les visites fautives.
+                log.warn("Écriture d'un lot de {} visites refusée par une contrainte d'intégrité, nouvel essai visite"
+                        + " par visite", enriched.size());
+                log.debug("Détail de l'échec du lot", t);
+                return writeOneByOne(enriched);
+            }
+            // Base indisponible, transaction impossible… : réessayer visite par visite multiplierait l'attente
+            // (délai d'obtention d'une connexion pour chaque visite) et bloquerait l'arrêt. Le lot est abandonné.
+            log.error("Écriture d'un lot de {} visites impossible, lot abandonné", enriched.size(), t);
+            dropped.addAndGet(enriched.size());
+            return List.of();
         }
+    }
+
+    private static boolean isIntegrityViolation(Throwable t) {
+        for (Throwable c = t; c != null; c = c.getCause() == c ? null : c.getCause()) {
+            if (c instanceof DataIntegrityViolationException
+                    || c instanceof org.hibernate.exception.ConstraintViolationException) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

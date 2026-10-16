@@ -58,9 +58,10 @@ asynchrone : le chemin de redirection n'attend jamais la base. Les visites passe
 par une file mémoire (`blinder.stats.queue-capacity`) vidée par un thread d'écriture
 au plus toutes les `blinder.stats.flush-interval`. Si la file est pleine, la visite
 est abandonnée et le compteur « visites perdues » du tableau de bord augmente. Un lot
-dont l'écriture échoue (par exemple un lien supprimé pendant le lot) est réécrit visite
-par visite : seules les visites réellement perdues sont comptées, les visites d'un lien
-supprimé disparaissant avec lui.
+refusé par une contrainte d'intégrité (par exemple un lien supprimé pendant le lot) est
+réécrit visite par visite : seules les visites réellement perdues sont comptées, les
+visites d'un lien supprimé disparaissant avec lui. Toute autre erreur (base
+indisponible…) abandonne le lot entier, compté comme perdu, sans nouvel essai.
 
 - Tableau de bord global : `/_/stats` ; par lien : `/_/links/{id}/stats` (période
   7, 30, 90 ou 365 jours).

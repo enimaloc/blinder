@@ -156,10 +156,12 @@ class VisitWriterTest {
     }
 
     @Test
-    void databaseOutageLogsOneTraceAndOneSummaryPerBatch() {
+    void databaseOutageLogsOneTracePerBatchAndDropsItWhole() {
+        java.util.concurrent.atomic.AtomicInteger attempts = new java.util.concurrent.atomic.AtomicInteger();
         TransactionTemplate down = new TransactionTemplate() {
             @Override
             public <T> T execute(org.springframework.transaction.support.TransactionCallback<T> action) {
+                attempts.incrementAndGet();
                 throw new org.springframework.dao.DataAccessResourceFailureException("base indisponible");
             }
         };
@@ -174,17 +176,48 @@ class VisitWriterTest {
             }
             assertThatCode(w::flush).doesNotThrowAnyException();
 
+            assertThat(attempts).hasValue(1);
             assertThat(w.dropped()).isEqualTo(5);
             List<ILoggingEvent> errors = logs.list.stream().filter(e -> e.getLevel() == Level.ERROR).toList();
-            assertThat(errors).hasSize(2);
-            assertThat(errors).filteredOn(e -> e.getThrowableProxy() != null).singleElement()
-                    .satisfies(e -> assertThat(e.getFormattedMessage()).contains("lot de 5 visites"));
-            assertThat(errors).filteredOn(e -> e.getThrowableProxy() == null).singleElement()
-                    .satisfies(e -> assertThat(e.getFormattedMessage()).contains("5 visite(s) perdue(s) sur 5"));
+            assertThat(errors).singleElement().satisfies(e -> {
+                assertThat(e.getFormattedMessage()).contains("lot de 5 visites");
+                assertThat(e.getThrowableProxy()).isNotNull();
+            });
             assertThat(logs.list).filteredOn(e -> e.getLevel() == Level.WARN).isEmpty();
         } finally {
             logger.detachAppender(logs);
         }
+    }
+
+    @Test
+    void connectionFailureIsTriedOnceDropsTheWholeBatchAndDoesNotStallTheWriter() {
+        // Premier appel : pas de connexion (ce qui prendrait connectionTimeout par visite si on réessayait une à une).
+        java.util.concurrent.atomic.AtomicInteger attempts = new java.util.concurrent.atomic.AtomicInteger();
+        TransactionTemplate flaky = new TransactionTemplate(tx.getTransactionManager()) {
+            @Override
+            public <T> T execute(org.springframework.transaction.support.TransactionCallback<T> action) {
+                if (attempts.incrementAndGet() == 1) {
+                    throw new org.springframework.transaction.CannotCreateTransactionException("pas de connexion");
+                }
+                return super.execute(action);
+            }
+        };
+        VisitWriter w = writer(links, flaky, 10, new NoopGeoLocator());
+        for (int i = 0; i < 4; i++) {
+            w.offer(record(link.getId(), Instant.now(), "1.1.1." + i));
+        }
+        assertThatCode(w::flush).doesNotThrowAnyException();
+
+        assertThat(attempts).hasValue(1);
+        assertThat(w.dropped()).isEqualTo(4);
+        assertThat(visits.count()).isZero();
+
+        // Le lot suivant passe normalement.
+        w.offer(record(link.getId(), Instant.now(), "2.2.2.2"));
+        w.flush();
+        assertThat(attempts).hasValue(2);
+        assertThat(visits.findAll()).singleElement().satisfies(v -> assertThat(v.getIp()).isEqualTo("2.2.2.2"));
+        assertThat(w.dropped()).isEqualTo(4);
     }
 
     @Test
