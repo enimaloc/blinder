@@ -30,6 +30,7 @@ dependencies {
     implementation("org.thymeleaf.extras:thymeleaf-extras-springsecurity6")
     implementation("org.apache.httpcomponents.client5:httpclient5")
     implementation("org.jsoup:jsoup:1.21.2")
+    implementation("io.nayuki:qrcodegen:1.8.0")
     implementation("com.maxmind.geoip2:geoip2:5.2.0")
     implementation("org.webjars.npm:chart.js:4.5.1")
     runtimeOnly("com.h2database:h2")
