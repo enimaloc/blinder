@@ -57,4 +57,6 @@ dependencies {
 
 tasks.withType<Test> {
     useJUnitPlatform()
+    // Lu une seule fois par la JVM à la création du premier HttpClient : autorise l'en-tête Host des tests en conteneur réel.
+    systemProperty("jdk.httpclient.allowRestrictedHeaders", "host")
 }

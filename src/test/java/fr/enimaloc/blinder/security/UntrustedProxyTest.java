@@ -3,7 +3,6 @@ package fr.enimaloc.blinder.security;
 import fr.enimaloc.blinder.domain.Domain;
 import fr.enimaloc.blinder.link.Link;
 import fr.enimaloc.blinder.support.TestData;
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -29,11 +28,6 @@ class UntrustedProxyTest {
     int port;
     @Autowired
     TestData data;
-
-    @BeforeAll
-    static void allowHostHeader() {
-        System.setProperty("jdk.httpclient.allowRestrictedHeaders", "host");
-    }
 
     @BeforeEach
     void setUp() {
