@@ -147,4 +147,36 @@ class StatsAdminTest {
         mvc.perform(get("/_/vendor/chart.js/4.5.1/dist/chart.umd.js").with(login(admin)))
                 .andExpect(status().isOk());
     }
+
+    @Test
+    void tagFilterRestrictsGlobalPageAndCsv() throws Exception {
+        Link tagged = data.link(link.getDomain(), "tgd", "https://example.com");
+        fr.enimaloc.blinder.tag.Tag promo = data.tag(admin, "promo");
+        data.tagLink(tagged, promo);
+        Instant now = Instant.now().minusSeconds(30);
+        data.visit(link, VisitOutcome.REDIRECTED, now, "203.0.113.1");
+        data.visit(tagged, VisitOutcome.REDIRECTED, now, "203.0.113.2");
+
+        mvc.perform(get("/_/stats").param("tag", promo.getId().toString()).with(login(admin)))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("go.example.com/tgd")))
+                .andExpect(content().string(org.hamcrest.Matchers.not(containsString("go.example.com/abc"))))
+                .andExpect(content().string(containsString("tag=" + promo.getId())));
+        String body = mvc.perform(get("/_/stats.csv").param("tag", promo.getId().toString()).with(login(admin)))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        assertThat(body.split("\r\n")).hasSize(2);
+        assertThat(body).contains(",tgd,").doesNotContain(",abc,");
+    }
+
+    @Test
+    void foreignOrUnknownTagIs404() throws Exception {
+        fr.enimaloc.blinder.tag.Tag theirs = data.tag(data.admin("other"), "promo");
+        mvc.perform(get("/_/stats").param("tag", theirs.getId().toString()).with(login(admin)))
+                .andExpect(status().isNotFound());
+        mvc.perform(get("/_/stats.csv").param("tag", theirs.getId().toString()).with(login(admin)))
+                .andExpect(status().isNotFound());
+        mvc.perform(get("/_/stats").param("tag", java.util.UUID.randomUUID().toString()).with(login(admin)))
+                .andExpect(status().isNotFound());
+    }
 }

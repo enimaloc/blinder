@@ -4,14 +4,23 @@
 <body>
 <nav th:replace="~{admin/fragments :: nav}"></nav>
 <main>
-    <h1 th:if="${link == null}">Statistiques</h1>
+    <h1 th:if="${link == null}">Statistiques<span th:if="${tag != null}" th:text="' · ' + ${tag.name}"></span></h1>
     <h1 th:if="${link != null}">Statistiques · <span th:text="${link.domain.host} + '/' + ${link.slug}"></span></h1>
+    <form method="get" th:if="${link == null}" th:action="@{/_/stats}">
+        <input type="hidden" name="days" th:value="${view.period.days()}">
+        <label for="tag">Tag</label>
+        <select id="tag" name="tag" onchange="this.form.submit()">
+            <option value="">Tous les liens</option>
+            <option th:each="t : ${allTags}" th:value="${t.id}" th:text="${t.name}"
+                    th:selected="${tag != null and t.id == tag.id}"></option>
+        </select>
+    </form>
     <p class="period">
         <th:block th:each="p : ${periods}">
             <strong th:if="${p == view.period}" th:text="${p.days()} + ' j'"></strong>
-            <a th:unless="${p == view.period}" th:href="@{${basePath}(days=${p.days()})}" th:text="${p.days()} + ' j'"></a>
+            <a th:unless="${p == view.period}" th:href="@{${basePath}(days=${p.days()})} + ${tagQuery}" th:text="${p.days()} + ' j'"></a>
         </th:block>
-        · <a th:href="@{${basePath} + '.csv'(days=${view.period.days()})}">Exporter en CSV</a>
+        · <a th:href="@{${basePath} + '.csv'(days=${view.period.days()})} + ${tagQuery}">Exporter en CSV</a>
         <th:block th:if="${link != null}"> · <a th:href="@{/_/links/{id}(id=${link.id})}">Modifier le lien</a></th:block>
     </p>
     <p class="notice" th:if="${view.exceedsRetention()}">

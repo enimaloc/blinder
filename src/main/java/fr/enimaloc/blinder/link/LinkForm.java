@@ -102,6 +102,10 @@ public class LinkForm {
 
     private Set<UUID> notifyChannelIds = new LinkedHashSet<>();
 
+    /** Noms séparés par des virgules ; les inconnus sont créés. */
+    @Size(max = 1000)
+    private String tags;
+
     /** Le formulaire posté déclare-t-il une limite ou une protection (pour l'avertissement d'aperçu) ? */
     public boolean declaresLimitOrProtection(boolean hasExistingPassword) {
         return (newPassword != null && !newPassword.isEmpty())

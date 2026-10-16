@@ -12,6 +12,8 @@ import fr.enimaloc.blinder.domain.DomainRepository;
 import fr.enimaloc.blinder.notification.FiredTriggerRepository;
 import fr.enimaloc.blinder.notification.TriggerType;
 import fr.enimaloc.blinder.redirect.RedirectPolicy;
+import fr.enimaloc.blinder.tag.Tag;
+import fr.enimaloc.blinder.tag.TagRepository;
 import fr.enimaloc.blinder.user.User;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -38,17 +40,19 @@ public class LinkService {
 
     private final LinkRepository links;
     private final DomainRepository domains;
+    private final TagRepository tags;
     private final SlugPolicy slugs;
     private final PasswordEncoder encoder;
     private final DeviceRepository devices;
     private final FiredTriggerRepository firedTriggers;
     private final ZoneId zone;
 
-    public LinkService(LinkRepository links, DomainRepository domains, SlugPolicy slugs,
+    public LinkService(LinkRepository links, DomainRepository domains, TagRepository tags, SlugPolicy slugs,
                        PasswordEncoder encoder, DeviceRepository devices, FiredTriggerRepository firedTriggers,
                        BlinderProperties properties) {
         this.links = links;
         this.domains = domains;
+        this.tags = tags;
         this.slugs = slugs;
         this.encoder = encoder;
         this.devices = devices;
@@ -56,14 +60,19 @@ public class LinkService {
         this.zone = properties.admin().timeZone();
     }
 
+    /** @param domainId filtre optionnel ; @param tagId filtre optionnel (tag d'un autre propriétaire : 404) */
     @Transactional(readOnly = true)
-    public List<Link> list(User owner, UUID domainId) {
-        if (domainId == null) {
-            return links.findAllByOwnerOrderByCreatedAtDesc(owner);
-        }
-        Domain domain = domains.findByIdAndOwner(domainId, owner)
+    public List<Link> list(User owner, UUID domainId, UUID tagId) {
+        Domain domain = domainId == null ? null : domains.findByIdAndOwner(domainId, owner)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
-        return links.findAllByOwnerAndDomainOrderByCreatedAtDesc(owner, domain);
+        Tag tag = tagId == null ? null : tags.findByIdAndOwner(tagId, owner)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+        if (tag != null) {
+            return domain == null ? links.findAllByOwnerAndTag(owner, tag)
+                    : links.findAllByOwnerAndDomainAndTag(owner, domain, tag);
+        }
+        return domain == null ? links.findAllByOwnerOrderByCreatedAtDesc(owner)
+                : links.findAllByOwnerAndDomainOrderByCreatedAtDesc(owner, domain);
     }
 
     @Transactional(readOnly = true)

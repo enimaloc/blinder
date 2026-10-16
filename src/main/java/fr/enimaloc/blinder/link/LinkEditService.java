@@ -2,6 +2,8 @@ package fr.enimaloc.blinder.link;
 
 import fr.enimaloc.blinder.link.preview.LinkPreviewService;
 import fr.enimaloc.blinder.notification.LinkNotificationService;
+import fr.enimaloc.blinder.tag.TagNames;
+import fr.enimaloc.blinder.tag.TagService;
 import fr.enimaloc.blinder.user.User;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -19,11 +21,13 @@ public class LinkEditService {
     private final LinkService links;
     private final LinkNotificationService notifications;
     private final LinkPreviewService previews;
+    private final TagService tags;
 
     @Transactional
     public Link create(User owner, LinkForm form) {
         notifications.validate(owner, form);
         Link created = links.create(owner, form);
+        tags.apply(owner, created, TagNames.parseList(form.getTags()));
         notifications.apply(owner, created, form);
         return created;
     }
@@ -32,6 +36,7 @@ public class LinkEditService {
     public Link update(User owner, UUID id, LinkForm form) {
         notifications.validate(owner, form);
         Link updated = links.update(owner, id, form);
+        tags.apply(owner, updated, TagNames.parseList(form.getTags()));
         notifications.apply(owner, updated, form);
         return updated;
     }

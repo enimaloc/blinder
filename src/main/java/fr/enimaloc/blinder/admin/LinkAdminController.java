@@ -14,6 +14,8 @@ import fr.enimaloc.blinder.link.preview.LinkPreviewService;
 import fr.enimaloc.blinder.notification.ChannelService;
 import fr.enimaloc.blinder.notification.LinkNotificationService;
 import fr.enimaloc.blinder.common.StaleEditException;
+import fr.enimaloc.blinder.tag.Tag;
+import fr.enimaloc.blinder.tag.TagService;
 import fr.enimaloc.blinder.user.CurrentUser;
 import fr.enimaloc.blinder.user.User;
 import jakarta.validation.Valid;
@@ -53,16 +55,20 @@ public class LinkAdminController {
     private final BlinderProperties properties;
     private final LinkNotificationService linkNotifications;
     private final ChannelService channels;
+    private final TagService tags;
 
     @GetMapping("/")
-    public String list(@RequestParam(name = "domain", required = false) UUID domainId, Model model) {
+    public String list(@RequestParam(name = "domain", required = false) UUID domainId,
+                       @RequestParam(name = "tag", required = false) UUID tagId, Model model) {
         User owner = currentUser.require();
-        List<LinkRow> rows = links.list(owner, domainId).stream()
-                .map(link -> new LinkRow(link, statuses.statusOf(link)))
+        List<LinkRow> rows = links.list(owner, domainId, tagId).stream()
+                .map(link -> new LinkRow(link, statuses.statusOf(link), sortedTags(link)))
                 .toList();
         model.addAttribute("rows", rows);
         model.addAttribute("domains", domains.list(owner));
+        model.addAttribute("allTags", tags.list(owner));
         model.addAttribute("selectedDomain", domainId);
+        model.addAttribute("selectedTag", tagId);
         return "admin/links/list";
     }
 
@@ -76,6 +82,7 @@ public class LinkAdminController {
         }
         linkNotifications.preselect(owner, form);
         model.addAttribute("form", form);
+        model.addAttribute("allTags", tags.list(owner));
         model.addAttribute("channels", channels.list(owner));
         model.addAttribute("domains", owned);
         model.addAttribute("devices", deviceService.all(owner));
@@ -90,6 +97,7 @@ public class LinkAdminController {
         User owner = currentUser.require();
         model.addAttribute("domains", domains.list(owner));
         model.addAttribute("channels", channels.list(owner));
+        model.addAttribute("allTags", tags.list(owner));
         model.addAttribute("devices", deviceService.all(owner));
         model.addAttribute("hasPassword", false);
         model.addAttribute("limitedOrProtected", form.declaresLimitOrProtection(false));
@@ -116,6 +124,7 @@ public class LinkAdminController {
         Link link = links.get(owner, id);
         LinkForm form = links.toForm(link);
         linkNotifications.fillForm(form, id);
+        form.setTags(tags.format(link));
         model.addAttribute("form", form);
         populateEdit(model, owner, link);
         return "admin/links/form";
@@ -172,6 +181,7 @@ public class LinkAdminController {
     private void populateEdit(Model model, User owner, Link link) {
         model.addAttribute("linkId", link.getId());
         model.addAttribute("channels", channels.list(owner));
+        model.addAttribute("allTags", tags.list(owner));
         model.addAttribute("useCount", link.getUseCount());
         model.addAttribute("status", statuses.statusOf(link));
         model.addAttribute("publicUrl", link.getDomain().getHost() + "/" + link.getSlug());
@@ -184,6 +194,10 @@ public class LinkAdminController {
         model.addAttribute("preview", preview);
         model.addAttribute("previewFetchedAt", preview == null || preview.getFetchedAt() == null ? null
                 : PREVIEW_DATE.format(preview.getFetchedAt().atZone(properties.admin().timeZone())));
+    }
+
+    private static List<Tag> sortedTags(Link link) {
+        return link.getTags().stream().sorted(java.util.Comparator.comparing(Tag::getNameKey)).toList();
     }
 
     private static void warnIfExposed(RedirectAttributes flash, Link saved) {
