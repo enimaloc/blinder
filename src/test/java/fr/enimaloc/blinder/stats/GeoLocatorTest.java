@@ -67,9 +67,14 @@ class GeoLocatorTest {
     @Test
     void configBuildsMaxMindLocatorFromRealDatabase() throws Exception {
         var locator = config.geoLocator(new GeoIpProperties(testDatabase()));
-        assertThat(locator).isInstanceOf(MaxMindGeoLocator.class);
-        assertThat(locator.locate("81.2.69.142")).isPresent();
-        ((MaxMindGeoLocator) locator).close();
+        try {
+            assertThat(locator).isInstanceOf(MaxMindGeoLocator.class);
+            assertThat(locator.locate("81.2.69.142")).isPresent();
+        } finally {
+            if (locator instanceof AutoCloseable closeable) {
+                closeable.close();
+            }
+        }
     }
 
     @Test
