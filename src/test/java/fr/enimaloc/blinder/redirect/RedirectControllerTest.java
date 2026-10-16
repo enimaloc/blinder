@@ -136,6 +136,25 @@ class RedirectControllerTest {
     }
 
     @Test
+    void disabledAndNotYetRedirectToDomainNotFoundUrlLikeUnknown() throws Exception {
+        domain.setNotFoundUrl("https://example.com/404");
+        domains.save(domain);
+        Link disabled = data.link(domain, "off", "https://example.com");
+        disabled.setEnabled(false);
+        data.save(disabled);
+        Link later = data.link(domain, "later", "https://example.com");
+        later.setNotBefore(NOW.plusSeconds(60));
+        data.save(later);
+
+        for (String slug : new String[]{"nope", "off", "later"}) {
+            mvc.perform(get("http://go.example.com/" + slug))
+                    .andExpect(status().isFound())
+                    .andExpect(redirectedUrl("https://example.com/404"))
+                    .andExpect(header().string("Cache-Control", "no-store"));
+        }
+    }
+
+    @Test
     void expiredAndExhaustedAre410() throws Exception {
         Link expired = data.link(domain, "old", "https://example.com");
         expired.setExpiresAt(NOW);

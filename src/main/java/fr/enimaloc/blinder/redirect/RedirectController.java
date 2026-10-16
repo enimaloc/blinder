@@ -52,8 +52,7 @@ public class RedirectController {
         }
         Optional<Link> found = links.findByDomainAndSlug(domain.get(), slugs.normalize(slug));
         if (found.isEmpty()) {
-            String notFoundUrl = domain.get().getNotFoundUrl();
-            return notFoundUrl != null ? redirectTo(notFoundUrl) : notFound();
+            return unknownLink(domain.get());
         }
 
         Link link = found.get();
@@ -74,14 +73,14 @@ public class RedirectController {
             }
             case Deny(DenyReason reason) -> {
                 events.publishEvent(new AccessDenied(link.getId(), reason, context));
-                yield denied(link, reason);
+                yield denied(domain.get(), link, reason);
             }
             case Challenge challenge ->
                     throw new IllegalStateException("Challenge decisions are not supported before lot 2");
         };
     }
 
-    private ModelAndView denied(Link link, DenyReason reason) {
+    private ModelAndView denied(Domain domain, Link link, DenyReason reason) {
         if (link.getDeniedUrl() != null) {
             return redirectTo(link.getDeniedUrl());
         }
@@ -90,7 +89,13 @@ public class RedirectController {
             mv.setStatus(HttpStatus.GONE);
             return mv;
         }
-        return notFound();
+        return unknownLink(domain);
+    }
+
+    /** Outcome shared by unknown slugs and disabled / not-yet-active links so they are indistinguishable. */
+    private static ModelAndView unknownLink(Domain domain) {
+        String notFoundUrl = domain.getNotFoundUrl();
+        return notFoundUrl != null ? redirectTo(notFoundUrl) : notFound();
     }
 
     private static ModelAndView notFound() {
