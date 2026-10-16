@@ -15,7 +15,10 @@ proxy de confiance.
   `172.18.0.0/16` :
 
   ```
-  SERVER_TOMCAT_REMOTEIP_INTERNAL_PROXIES=172\\.18\\.\\d{1,3}\\.\\d{1,3}
+  # variable d'environnement (barres obliques simples) :
+  SERVER_TOMCAT_REMOTEIP_INTERNAL_PROXIES='172\.18\.\d{1,3}\.\d{1,3}'
+  # application.properties (barres obliques doublées) :
+  server.tomcat.remoteip.internal-proxies=172\\.18\\.\\d{1,3}\\.\\d{1,3}
   ```
 
 - Le proxy **doit écraser** (et non compléter) `X-Forwarded-For`,
@@ -37,7 +40,7 @@ proxy de confiance.
 Un lien peut combiner appareils autorisés, IP/CIDR autorisées et mot de passe :
 un seul moyen valide suffit. Un lien protégé par appareils reste fermé même si
 tous ses appareils sont révoqués (il ne s'ouvre qu'avec un autre moyen configuré,
-sinon à personne) ; décocher tous les appareils dans le panel retire la protection.
+sinon à personne) ; seule la case « Réserver aux appareils autorisés » du formulaire de lien retire cette protection (décocher les appareils ne suffit pas).
 
 Compromis acceptés :
 
