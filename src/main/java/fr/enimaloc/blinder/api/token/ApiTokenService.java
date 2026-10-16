@@ -34,7 +34,7 @@ public class ApiTokenService {
     public CreatedApiToken create(User owner, String name) {
         String trimmed = name == null ? "" : name.trim();
         if (trimmed.isEmpty() || trimmed.length() > MAX_NAME_LENGTH) {
-            throw new FieldErrorException("name", "1 à 100 caractères");
+            throw new FieldErrorException("name", "Le nom doit contenir entre 1 et 100 caractères");
         }
         String raw = PREFIX + DeviceTokens.newToken();
         ApiToken token = tokens.save(new ApiToken(owner, trimmed, raw.substring(0, DISPLAY_PREFIX_LENGTH),

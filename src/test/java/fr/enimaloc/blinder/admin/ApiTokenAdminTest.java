@@ -79,10 +79,10 @@ class ApiTokenAdminTest {
     void nameIsRequiredAndAtMost100Characters() throws Exception {
         mvc.perform(post("/_/tokens").with(asAdmin).with(csrf()).param("name", "   "))
                 .andExpect(status().isOk())
-                .andExpect(content().string(containsString("1 à 100 caractères")));
+                .andExpect(content().string(containsString("Le nom doit contenir entre 1 et 100 caractères")));
         mvc.perform(post("/_/tokens").with(asAdmin).with(csrf()).param("name", "x".repeat(101)))
                 .andExpect(status().isOk())
-                .andExpect(content().string(containsString("1 à 100 caractères")));
+                .andExpect(content().string(containsString("Le nom doit contenir entre 1 et 100 caractères")));
         assertThat(tokens.findAll()).isEmpty();
         mvc.perform(post("/_/tokens").with(asAdmin).with(csrf()).param("name", "x".repeat(100)))
                 .andExpect(redirectedUrl("/_/tokens"));
