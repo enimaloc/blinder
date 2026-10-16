@@ -78,6 +78,14 @@ class ProtectionRuleTest {
     }
 
     @Test
+    void unreadableConfiguredAllowlistMatchesNothing() {
+        Link link = link(null, "garbage,not-an-ip");
+        assertThat(evaluate(link, Set.of(), ctx("1.2.3.4", null, null))).isEqualTo(FORBIDDEN);
+        Link withPassword = link(HASH, "garbage");
+        assertThat(evaluate(withPassword, Set.of(), ctx("1.2.3.4", null, null))).isEqualTo(ASK);
+    }
+
+    @Test
     void allowlistOnly() {
         Link link = link(null, "203.0.113.0/24");
         assertThat(evaluate(link, Set.of(), ctx("203.0.113.9", null, null))).isEqualTo(ALLOW);

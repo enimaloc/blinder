@@ -16,6 +16,16 @@ class IpAllowlistTest {
     }
 
     @Test
+    void unreadableStoredValueIsConfiguredButMatchesNothing() {
+        IpAllowlist garbage = IpAllowlist.parse("garbage,not-an-ip");
+        assertThat(garbage.isConfigured()).isTrue();
+        assertThat(garbage.matches("1.2.3.4")).isFalse();
+        assertThat(IpAllowlist.parse(null).isConfigured()).isFalse();
+        assertThat(IpAllowlist.parse("  ").isConfigured()).isFalse();
+        assertThat(IpAllowlist.parse("10.0.0.0/8").isConfigured()).isTrue();
+    }
+
+    @Test
     void blankInputIsNull() {
         assertThat(IpAllowlist.normalize(null)).isNull();
         assertThat(IpAllowlist.normalize("  \n ")).isNull();

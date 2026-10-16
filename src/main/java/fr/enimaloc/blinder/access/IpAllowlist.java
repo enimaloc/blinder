@@ -15,10 +15,19 @@ public final class IpAllowlist {
 
     private static final IpAllowlist EMPTY = new IpAllowlist(List.of());
 
+    /** Stockée mais illisible : configurée, sans plage (n'autorise personne). */
+    private static final IpAllowlist UNREADABLE = new IpAllowlist(List.of(), true);
+
     private final List<Range> ranges;
+    private final boolean configured;
 
     private IpAllowlist(List<Range> ranges) {
+        this(ranges, !ranges.isEmpty());
+    }
+
+    private IpAllowlist(List<Range> ranges, boolean configured) {
         this.ranges = ranges;
+        this.configured = configured;
     }
 
     /** Lit la forme stockée ; une entrée illisible est ignorée (elle n'autorise rien). */
@@ -30,7 +39,7 @@ public final class IpAllowlist {
         for (String entry : stored.split(",")) {
             parseEntry(entry.trim()).ifPresent(ranges::add);
         }
-        return ranges.isEmpty() ? EMPTY : new IpAllowlist(List.copyOf(ranges));
+        return ranges.isEmpty() ? UNREADABLE : new IpAllowlist(List.copyOf(ranges));
     }
 
     /**
@@ -57,8 +66,14 @@ public final class IpAllowlist {
         return canonical.isEmpty() ? null : String.join(",", canonical);
     }
 
+    /** Aucune plage lisible (une valeur stockée mais illisible reste {@link #isConfigured() configurée}). */
     public boolean isEmpty() {
         return ranges.isEmpty();
+    }
+
+    /** Une valeur est stockée (même illisible) : l'IP doit alors correspondre, sinon refus. */
+    public boolean isConfigured() {
+        return configured;
     }
 
     public boolean matches(String clientIp) {
