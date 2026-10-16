@@ -18,7 +18,7 @@
         Les visites détaillées sont conservées moins longtemps que cette période : les totaux, tops et visites
         récentes ne couvrent que la durée de conservation. La courbe journalière reste complète.
     </p>
-    <p class="notice" th:if="${dropped > 0}" th:text="${dropped} + ' visite(s) perdue(s) depuis le démarrage (file saturée ou erreur d''écriture).'"></p>
+    <p class="notice" th:if="${dropped > 0}" th:text="|${dropped} visite(s) perdue(s) depuis le démarrage (file saturée ou erreur d'écriture).|"></p>
 
     <div class="cards">
         <div class="card"><span class="muted">Visites</span><strong th:text="${view.totals.total()}">0</strong></div>
