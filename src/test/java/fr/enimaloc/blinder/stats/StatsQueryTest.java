@@ -62,7 +62,7 @@ class StatsQueryTest {
         previewed.increment(1);
         dailyStats.saveAll(List.of(redirected, denied, previewed));
 
-        List<StatsQuery.DayPoint> points = query.daily(admin, null, StatsPeriod.D7);
+        List<StatsQuery.DayPoint> points = query.daily(admin, StatsScope.all(), StatsPeriod.D7);
 
         assertThat(points).hasSize(7);
         assertThat(points.getFirst()).isEqualTo(new StatsQuery.DayPoint(today.minusDays(6), 0, 0, 0));
@@ -80,15 +80,15 @@ class StatsQueryTest {
         Link otherLink = data.link(data.domain("other.example.com", other), "zzz", "https://example.com");
         data.visit(otherLink, VisitOutcome.REDIRECTED, now, "203.0.113.50");
 
-        StatsQuery.Totals totals = query.totals(admin, null, StatsPeriod.D30);
+        StatsQuery.Totals totals = query.totals(admin, StatsScope.all(), StatsPeriod.D30);
 
         assertThat(totals.total()).isEqualTo(3);
         assertThat(totals.byOutcome()).containsEntry(VisitOutcome.REDIRECTED, 2L).containsEntry(VisitOutcome.DENIED, 1L);
         assertThat(totals.uniqueIps()).isEqualTo(2);
         assertThat(totals.bots()).isZero();
-        assertThat(query.totals(admin, link.getId(), StatsPeriod.D365).total()).isEqualTo(4);
-        assertThat(query.totals(admin, otherLink.getId(), StatsPeriod.D30).total()).isZero();
-        assertThat(query.topLinks(admin, StatsPeriod.D30)).extracting(StatsQuery.Count::label)
+        assertThat(query.totals(admin, StatsScope.link(link.getId()), StatsPeriod.D365).total()).isEqualTo(4);
+        assertThat(query.totals(admin, StatsScope.link(otherLink.getId()), StatsPeriod.D30).total()).isZero();
+        assertThat(query.topLinks(admin, StatsScope.all(), StatsPeriod.D30)).extracting(StatsQuery.Count::label)
                 .containsExactly("go.example.com/abc");
     }
 
@@ -98,11 +98,11 @@ class StatsQueryTest {
         data.visit(link, VisitOutcome.REDIRECTED, now, "203.0.113.1");
         data.visit(link, VisitOutcome.REDIRECTED, now, "203.0.113.2");
 
-        assertThat(query.topCountries(admin, null, StatsPeriod.D7))
+        assertThat(query.topCountries(admin, StatsScope.all(), StatsPeriod.D7))
                 .containsExactly(new StatsQuery.Count("Inconnu", 2));
-        assertThat(query.topReferers(admin, null, StatsPeriod.D7))
+        assertThat(query.topReferers(admin, StatsScope.all(), StatsPeriod.D7))
                 .containsExactly(new StatsQuery.Count("Direct", 2));
-        assertThat(query.browsers(admin, null, StatsPeriod.D7))
+        assertThat(query.browsers(admin, StatsScope.all(), StatsPeriod.D7))
                 .containsExactly(new StatsQuery.Count("Chrome", 2));
     }
 
@@ -128,8 +128,37 @@ class StatsQueryTest {
         };
 
         // même appelé depuis une transaction, l'export la suspend
-        transactions.executeWithoutResult(status -> query.exportCsv(admin, null, StatsPeriod.D7, probe));
+        transactions.executeWithoutResult(status -> query.exportCsv(admin, StatsScope.all(), StatsPeriod.D7, probe));
 
         assertThat(activeDuringWrite).hasSizeGreaterThanOrEqualTo(3).containsOnly(false);
+    }
+
+    @Test
+    void tagScopeAggregatesOnlyTaggedLinks() {
+        Link tagged = data.link(link.getDomain(), "tgd", "https://example.com");
+        fr.enimaloc.blinder.tag.Tag promo = data.tag(admin, "promo");
+        data.tagLink(tagged, promo);
+        Instant now = clock.instant().minusSeconds(60);
+        data.visit(link, VisitOutcome.REDIRECTED, now, "203.0.113.1");
+        data.visit(tagged, VisitOutcome.REDIRECTED, now, "203.0.113.2");
+        data.visit(tagged, VisitOutcome.DENIED, now, "203.0.113.3");
+        LocalDate today = LocalDate.now(clock.withZone(blinder.admin().timeZone()));
+        VisitDailyStat plain = new VisitDailyStat(link, admin, today, VisitOutcome.REDIRECTED);
+        plain.increment(5);
+        VisitDailyStat tg = new VisitDailyStat(tagged, admin, today, VisitOutcome.REDIRECTED);
+        tg.increment(2);
+        dailyStats.saveAll(List.of(plain, tg));
+        StatsScope scope = StatsScope.tag(promo.getId());
+
+        assertThat(query.daily(admin, scope, StatsPeriod.D7).getLast()).isEqualTo(new StatsQuery.DayPoint(today, 2, 0, 0));
+        assertThat(query.daily(admin, StatsScope.all(), StatsPeriod.D7).getLast()).isEqualTo(new StatsQuery.DayPoint(today, 7, 0, 0));
+        assertThat(query.totals(admin, scope, StatsPeriod.D30).total()).isEqualTo(2);
+        assertThat(query.topLinks(admin, scope, StatsPeriod.D30)).extracting(StatsQuery.Count::label)
+                .containsExactly("go.example.com/tgd");
+        assertThat(query.recent(admin, scope, StatsPeriod.D30, 50)).hasSize(2);
+        java.io.StringWriter csv = new java.io.StringWriter();
+        query.exportCsv(admin, scope, StatsPeriod.D30, csv);
+        assertThat(csv.toString().split("\r\n")).hasSize(3);
+        assertThat(query.totals(admin, StatsScope.tag(java.util.UUID.randomUUID()), StatsPeriod.D30).total()).isZero();
     }
 }

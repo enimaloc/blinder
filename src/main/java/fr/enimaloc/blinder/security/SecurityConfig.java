@@ -1,5 +1,9 @@
 package fr.enimaloc.blinder.security;
 
+import fr.enimaloc.blinder.api.ApiProblems;
+import fr.enimaloc.blinder.api.ApiRequestMatcher;
+import fr.enimaloc.blinder.api.ApiTokenFilter;
+import fr.enimaloc.blinder.api.token.ApiTokenService;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -15,7 +19,9 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.SimpleUrlAuthenticationFailureHandler;
 import org.springframework.security.web.authentication.SimpleUrlAuthenticationSuccessHandler;
+import org.springframework.security.web.authentication.AnonymousAuthenticationFilter;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.web.context.RequestAttributeSecurityContextRepository;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter;
 import java.io.IOException;
@@ -31,6 +37,32 @@ public class SecurityConfig {
     @Configuration(proxyBeanMethods = false)
     @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
     static class WebChains {
+
+        /**
+         * API REST : jeton {@code Bearer} uniquement. Sans état, sans CSRF ni formulaire ; le contexte de sécurité n'est
+         * jamais lu dans (ni écrit en) session, donc la session admin n'ouvre pas l'API.
+         */
+        @Bean
+        @Order(0)
+        SecurityFilterChain apiChain(HttpSecurity http, ApiTokenService tokens, RateLimiters rateLimiters)
+                throws Exception {
+            http.securityMatcher(new ApiRequestMatcher())
+                    .addFilterBefore(new ApiTokenFilter(tokens, rateLimiters.apiAuth(), ApiProblems.unauthorized()),
+                            AnonymousAuthenticationFilter.class)
+                    .authorizeHttpRequests(auth -> auth.anyRequest().hasRole("ADMIN"))
+                    .csrf(csrf -> csrf.disable())
+                    .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                    .securityContext(context -> context
+                            .securityContextRepository(new RequestAttributeSecurityContextRepository()))
+                    .requestCache(cache -> cache.disable())
+                    .formLogin(form -> form.disable())
+                    .httpBasic(basic -> basic.disable())
+                    .logout(logout -> logout.disable())
+                    .exceptionHandling(errors -> errors
+                            .authenticationEntryPoint(ApiProblems.unauthorized())
+                            .accessDeniedHandler(ApiProblems.forbidden()));
+            return http.build();
+        }
 
         @Bean
         @Order(1)

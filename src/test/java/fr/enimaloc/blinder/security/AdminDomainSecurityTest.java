@@ -9,6 +9,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.forwardedUrl;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrlPattern;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -41,6 +42,13 @@ class AdminDomainSecurityTest {
         mvc.perform(get("http://admin.example.com/_/"))
                 .andExpect(status().isFound())
                 .andExpect(redirectedUrlPattern("/**/_/login"));
+    }
+
+    @Test
+    void apiOnAdminDomainUsesTheApiChain() throws Exception {
+        mvc.perform(get("http://admin.example.com/_/api/v1/domains"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(header().string("WWW-Authenticate", "Bearer"));
     }
 
     @Test

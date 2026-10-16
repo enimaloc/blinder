@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="fr" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{admin/fragments :: head('Tags')}"></head>
+<body>
+<nav th:replace="~{admin/fragments :: nav}"></nav>
+<main>
+    <h1>Tags</h1>
+    <h2>Nouveau tag</h2>
+    <form class="tag-form" method="post" th:action="@{/_/tags}">
+        <label for="new-name">Nom</label>
+        <input id="new-name" name="name" maxlength="40" required th:value="${createForm?.name}">
+        <label for="new-color">Couleur</label>
+        <input id="new-color" name="color" type="color" value="#2563eb">
+        <label><input type="checkbox" name="noColor" value="true" checked> Sans couleur</label>
+        <button type="submit">Créer</button>
+    </form>
+    <p class="error" th:if="${createError}" th:text="${createError}"></p>
+    <table>
+        <tr><th>Tag</th><th>Liens</th><th>Modifier</th><th></th></tr>
+        <tr th:each="t : ${tags}">
+            <td><span class="tag" th:text="${t.name}" th:style="${t.color} != null ? '--tag-color: ' + ${t.color}"></span></td>
+            <td><a th:href="@{/_/(tag=${t.id})}" th:text="${counts.getOrDefault(t.id, 0L)}"></a></td>
+            <td>
+                <form class="tag-form" method="post" th:action="@{/_/tags/{id}(id=${t.id})}">
+                    <input name="name" maxlength="40" required th:value="${t.name}" aria-label="Nom">
+                    <input name="color" type="color" th:value="${t.color} ?: '#6b7280'" aria-label="Couleur">
+                    <label><input type="checkbox" name="noColor" value="true" th:checked="${t.color == null}"> Sans couleur</label>
+                    <button type="submit">Enregistrer</button>
+                </form>
+                <p class="error" th:if="${rowError != null and rowErrorId == t.id}" th:text="${rowError}"></p>
+            </td>
+            <td>
+                <form class="inline" method="post" th:action="@{/_/tags/{id}/delete(id=${t.id})}">
+                    <button class="danger" type="submit">Supprimer</button>
+                </form>
+            </td>
+        </tr>
+        <tr th:if="${tags.isEmpty()}"><td colspan="4" class="notice">Aucun tag.</td></tr>
+    </table>
+</main>
+</body>
+</html>

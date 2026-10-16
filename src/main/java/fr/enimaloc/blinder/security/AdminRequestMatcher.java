@@ -37,7 +37,7 @@ public class AdminRequestMatcher implements RequestMatcher {
      * Chemin décodé et normalisé (percent-decoding, paramètres ;x retirés), comme le fait Spring MVC :
      * sinon {@code /%5F/} contournerait la chaîne admin tout en atteignant les handlers {@code /_/}.
      */
-    static String pathOf(HttpServletRequest request) {
+    public static String pathOf(HttpServletRequest request) {
         return UrlPathHelper.defaultInstance.getPathWithinApplication(request);
     }
 }

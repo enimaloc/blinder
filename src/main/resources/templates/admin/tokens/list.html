@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="fr" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{admin/fragments :: head('Jetons d’API')}"></head>
+<body>
+<nav th:replace="~{admin/fragments :: nav}"></nav>
+<main>
+    <h1>Jetons d'API</h1>
+    <p class="notice">Les jetons donnent accès à l'API REST (<code>/_/api/v1</code>) avec vos droits, via l'en-tête
+        <code>Authorization: Bearer &lt;jeton&gt;</code>.</p>
+    <section th:if="${createdToken}">
+        <h2 th:text="'Jeton « ' + ${createdName} + ' » créé'">Jeton créé</h2>
+        <p class="error">Copiez-le maintenant : il n'est affiché qu'une seule fois et ne pourra pas être retrouvé.</p>
+        <p><code th:text="${createdToken}"></code></p>
+    </section>
+    <h2>Nouveau jeton</h2>
+    <form class="inline" method="post" th:action="@{/_/tokens}">
+        <label for="token-name">Nom</label>
+        <input id="token-name" name="name" maxlength="100" required th:value="${name}">
+        <button type="submit">Créer</button>
+    </form>
+    <p class="error" th:if="${createError}" th:text="${createError}"></p>
+    <table>
+        <tr><th>Nom</th><th>Préfixe</th><th>Création</th><th>Dernière utilisation</th><th></th></tr>
+        <tr th:each="t : ${tokens}">
+            <td th:text="${t.name()}"></td>
+            <td><code th:text="${t.prefix()} + '…'"></code></td>
+            <td th:text="${t.createdAt()}"></td>
+            <td th:text="${t.lastUsedAt()}"></td>
+            <td>
+                <form class="inline" method="post" th:action="@{/_/tokens/{id}/delete(id=${t.id()})}">
+                    <button class="danger" type="submit">Révoquer</button>
+                </form>
+            </td>
+        </tr>
+        <tr th:if="${tokens.isEmpty()}"><td colspan="5" class="notice">Aucun jeton.</td></tr>
+    </table>
+</main>
+</body>
+</html>

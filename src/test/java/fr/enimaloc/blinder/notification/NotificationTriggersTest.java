@@ -162,7 +162,7 @@ class NotificationTriggersTest {
     }
 
     @Test
-    void editingTheLinkRearmsTheOneShotTriggers() {
+    void editingTheExpiryRearmsTheExpiredTriggerButUnrelatedEditsDoNot() {
         settings(s -> s.setOnExpired(true));
         triggers.onVisits(List.of(visit(VisitOutcome.DENIED, DenyReason.EXPIRED, Instant.now())));
         assertThat(sent(TriggerType.EXPIRED)).hasSize(1);
@@ -170,6 +170,13 @@ class NotificationTriggersTest {
         assertThat(sent(TriggerType.EXPIRED)).hasSize(1);
 
         var form = linkService.toForm(linkService.get(admin, link.getId()));
+        form.setTargetUrl(form.getTargetUrl() + "/other");
+        linkService.update(admin, link.getId(), form);
+        triggers.onVisits(List.of(visit(VisitOutcome.DENIED, DenyReason.EXPIRED, Instant.now())));
+        assertThat(sent(TriggerType.EXPIRED)).hasSize(1);
+
+        form = linkService.toForm(linkService.get(admin, link.getId()));
+        form.setExpiresAt(java.time.LocalDateTime.now().minusDays(1));
         linkService.update(admin, link.getId(), form);
         triggers.onVisits(List.of(visit(VisitOutcome.DENIED, DenyReason.EXPIRED, Instant.now())));
         assertThat(sent(TriggerType.EXPIRED)).hasSize(2);

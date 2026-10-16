@@ -1,19 +1,22 @@
 package fr.enimaloc.blinder.link;
 
 import fr.enimaloc.blinder.domain.Domain;
+import fr.enimaloc.blinder.tag.Tag;
 import fr.enimaloc.blinder.user.User;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
-public interface LinkRepository extends JpaRepository<Link, UUID> {
+public interface LinkRepository extends JpaRepository<Link, UUID>, JpaSpecificationExecutor<Link> {
 
     Optional<Link> findByDomainAndSlug(Domain domain, String slug);
 
@@ -21,13 +24,29 @@ public interface LinkRepository extends JpaRepository<Link, UUID> {
 
     boolean existsByDomain(Domain domain);
 
-    @EntityGraph(attributePaths = "domain")
+    @EntityGraph(attributePaths = {"domain", "tags"})
     List<Link> findAllByOwnerOrderByCreatedAtDesc(User owner);
 
-    @EntityGraph(attributePaths = "domain")
+    @EntityGraph(attributePaths = {"domain", "tags"})
     List<Link> findAllByOwnerAndDomainOrderByCreatedAtDesc(User owner, Domain domain);
 
-    @EntityGraph(attributePaths = "domain")
+    @EntityGraph(attributePaths = {"domain", "tags"})
+    @Query("select l from Link l where l.owner = :owner and :tag member of l.tags order by l.createdAt desc")
+    List<Link> findAllByOwnerAndTag(@Param("owner") User owner, @Param("tag") Tag tag);
+
+    @EntityGraph(attributePaths = {"domain", "tags"})
+    @Query("""
+            select l from Link l where l.owner = :owner and l.domain = :domain and :tag member of l.tags
+             order by l.createdAt desc
+            """)
+    List<Link> findAllByOwnerAndDomainAndTag(@Param("owner") User owner, @Param("domain") Domain domain,
+                                             @Param("tag") Tag tag);
+
+    /** Recharge une page de liens avec domaine et tags (la pagination ne peut pas joindre une collection). */
+    @EntityGraph(attributePaths = {"domain", "tags"})
+    List<Link> findAllByIdIn(Collection<UUID> ids);
+
+    @EntityGraph(attributePaths = {"domain", "tags"})
     Optional<Link> findByIdAndOwner(UUID id, User owner);
 
     /**

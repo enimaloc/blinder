@@ -16,6 +16,7 @@ public class RateLimitConfig {
         // Valider que les fenêtres sont strictement positives
         validateWindow("blinder.rate-limit.link-password.window", properties.linkPassword().window());
         validateWindow("blinder.rate-limit.admin-login.window", properties.adminLogin().window());
+        validateWindow("blinder.rate-limit.api-auth.window", properties.apiAuth().window());
 
         return new RateLimiters(
                 new RateLimiter(properties.linkPassword().maxFailures(), properties.linkPassword().window(),
@@ -23,6 +24,8 @@ public class RateLimitConfig {
                 new RateLimiter(properties.linkPassword().aggregateMaxFailures(), properties.linkPassword().window(),
                         clock, MAX_KEYS),
                 new RateLimiter(properties.adminLogin().maxFailures(), properties.adminLogin().window(),
+                        clock, MAX_KEYS),
+                new RateLimiter(properties.apiAuth().maxFailures(), properties.apiAuth().window(),
                         clock, MAX_KEYS));
     }
 

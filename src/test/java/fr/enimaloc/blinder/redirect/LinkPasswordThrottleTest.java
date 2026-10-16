@@ -19,7 +19,9 @@ class LinkPasswordThrottleTest {
     final RateLimiter perClient = new RateLimiter(5, Duration.ofMinutes(15), clock, 100);
     final RateLimiter aggregate = new RateLimiter(7, Duration.ofMinutes(15), clock, 100);
     final LinkPasswordThrottle throttle =
-            new LinkPasswordThrottle(new RateLimiters(perClient, aggregate, new RateLimiter(5, Duration.ofMinutes(15), clock, 100)));
+            new LinkPasswordThrottle(new RateLimiters(perClient, aggregate,
+                    new RateLimiter(5, Duration.ofMinutes(15), clock, 100),
+                    new RateLimiter(20, Duration.ofMinutes(15), clock, 100)));
     final UUID link = UUID.randomUUID();
 
     @Test

@@ -26,7 +26,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-/** Lecture des statistiques d'un propriétaire, pour tous ses liens ({@code linkId == null}) ou pour un seul. */
+/** Lecture des statistiques d'un propriétaire, pour tous ses liens, un seul lien ou les liens d'un tag (voir {@link StatsScope}). */
 @Service
 @Transactional(readOnly = true)
 @RequiredArgsConstructor
@@ -58,18 +58,16 @@ public class StatsQuery {
     private final Clock clock;
     private final TransactionTemplate transactions;
 
-    public List<DayPoint> daily(User owner, UUID linkId, StatsPeriod period) {
+    public List<DayPoint> daily(User owner, StatsScope scope, StatsPeriod period) {
         ZoneId zone = blinder.admin().timeZone();
         LocalDate today = LocalDate.now(clock.withZone(zone));
         LocalDate first = today.minusDays(period.days() - 1L);
         String jpql = "select s.day, s.outcome, sum(s.visits) from VisitDailyStat s where s.owner = :owner"
-                + (linkId == null ? "" : " and s.link.id = :linkId")
+                + scope.clause("s")
                 + " and s.day >= :first and s.day <= :last group by s.day, s.outcome";
         TypedQuery<Object[]> query = em.createQuery(jpql, Object[].class)
                 .setParameter("owner", owner).setParameter("first", first).setParameter("last", today);
-        if (linkId != null) {
-            query.setParameter("linkId", linkId);
-        }
+        scope.bind(query);
         Map<LocalDate, long[]> byDay = new java.util.HashMap<>();
         for (Object[] r : query.getResultList()) {
             long[] cells = byDay.computeIfAbsent((LocalDate) r[0], d -> new long[3]);
@@ -85,51 +83,51 @@ public class StatsQuery {
         return points;
     }
 
-    public Totals totals(User owner, UUID linkId, StatsPeriod period) {
+    public Totals totals(User owner, StatsScope scope, StatsPeriod period) {
         Map<VisitOutcome, Long> byOutcome = new EnumMap<>(VisitOutcome.class);
         long total = 0;
-        for (Object[] r : visitQuery("select v.outcome, count(v) from Visit v", "group by v.outcome", owner, linkId, period)
+        for (Object[] r : visitQuery("select v.outcome, count(v) from Visit v", "group by v.outcome", owner, scope, period)
                 .getResultList()) {
             long n = ((Number) r[1]).longValue();
             byOutcome.put((VisitOutcome) r[0], n);
             total += n;
         }
         Object[] extra = visitQuery("select count(distinct v.ip), sum(case when v.bot = true then 1 else 0 end) from Visit v",
-                "", owner, linkId, period).getSingleResult();
+                "", owner, scope, period).getSingleResult();
         long uniqueIps = extra[0] == null ? 0 : ((Number) extra[0]).longValue();
         long bots = extra[1] == null ? 0 : ((Number) extra[1]).longValue();
         return new Totals(total, byOutcome, uniqueIps, bots);
     }
 
-    public List<Count> topCountries(User owner, UUID linkId, StatsPeriod period) {
-        return top("v.country", "Inconnu", owner, linkId, period);
+    public List<Count> topCountries(User owner, StatsScope scope, StatsPeriod period) {
+        return top("v.country", "Inconnu", owner, scope, period);
     }
 
-    public List<Count> topReferers(User owner, UUID linkId, StatsPeriod period) {
-        return top("v.refererHost", "Direct", owner, linkId, period);
+    public List<Count> topReferers(User owner, StatsScope scope, StatsPeriod period) {
+        return top("v.refererHost", "Direct", owner, scope, period);
     }
 
-    public List<Count> browsers(User owner, UUID linkId, StatsPeriod period) {
-        return top("v.browser", "Inconnu", owner, linkId, period);
+    public List<Count> browsers(User owner, StatsScope scope, StatsPeriod period) {
+        return top("v.browser", "Inconnu", owner, scope, period);
     }
 
-    public List<Count> oss(User owner, UUID linkId, StatsPeriod period) {
-        return top("v.os", "Inconnu", owner, linkId, period);
+    public List<Count> oss(User owner, StatsScope scope, StatsPeriod period) {
+        return top("v.os", "Inconnu", owner, scope, period);
     }
 
     /** Vue globale uniquement : libellé {@code domaine/slug}. */
-    public List<Count> topLinks(User owner, StatsPeriod period) {
+    public List<Count> topLinks(User owner, StatsScope scope, StatsPeriod period) {
         TypedQuery<Object[]> query = visitQuery(
                 "select d.host, l.slug, count(v) from Visit v join v.link l join l.domain d",
-                "group by d.host, l.slug order by count(v) desc, d.host, l.slug", owner, null, period);
+                "group by d.host, l.slug order by count(v) desc, d.host, l.slug", owner, scope, period);
         return query.setMaxResults(TOP).getResultList().stream()
                 .map(r -> new Count(r[0] + "/" + r[1], ((Number) r[2]).longValue())).toList();
     }
 
-    public List<VisitRow> recent(User owner, UUID linkId, StatsPeriod period, int limit) {
+    public List<VisitRow> recent(User owner, StatsScope scope, StatsPeriod period, int limit) {
         ZoneId zone = blinder.admin().timeZone();
         return visitQuery("select v from Visit v join fetch v.link l join fetch l.domain",
-                "order by v.occurredAt desc, v.id", Visit.class, owner, linkId, period)
+                "order by v.occurredAt desc, v.id", Visit.class, owner, scope, period)
                 .setMaxResults(limit).getResultList().stream().map(v -> row(v, zone)).toList();
     }
 
@@ -144,7 +142,7 @@ public class StatsQuery {
      * garder la connexion à la base pendant un envoi lent.
      */
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
-    public void exportCsv(User owner, UUID linkId, StatsPeriod period, Writer out) {
+    public void exportCsv(User owner, StatsScope scope, StatsPeriod period, Writer out) {
         ZoneId zone = blinder.admin().timeZone();
         CsvWriter csv = new CsvWriter(out);
         TransactionTemplate reads = new TransactionTemplate(transactions.getTransactionManager());
@@ -163,7 +161,7 @@ public class StatsQuery {
                 UUID cursorId = lastId;
                 Page page = reads.execute(status -> {
                     TypedQuery<Visit> query = visitQuery("select v from Visit v join fetch v.link l join fetch l.domain",
-                            after + "order by v.occurredAt, v.id", Visit.class, owner, linkId, from, to);
+                            after + "order by v.occurredAt, v.id", Visit.class, owner, scope, from, to);
                     if (cursorAt != null) {
                         query.setParameter("lastAt", cursorAt).setParameter("lastId", cursorId);
                     }
@@ -194,17 +192,17 @@ public class StatsQuery {
         }
     }
 
-    public StatsView view(User owner, UUID linkId, StatsPeriod period) {
-        return new StatsView(period, daily(owner, linkId, period), totals(owner, linkId, period),
-                topCountries(owner, linkId, period), topReferers(owner, linkId, period),
-                browsers(owner, linkId, period), oss(owner, linkId, period),
-                linkId == null ? topLinks(owner, period) : List.of(),
-                recent(owner, linkId, period, 50), exceedsRetention(period));
+    public StatsView view(User owner, StatsScope scope, StatsPeriod period) {
+        return new StatsView(period, daily(owner, scope, period), totals(owner, scope, period),
+                topCountries(owner, scope, period), topReferers(owner, scope, period),
+                browsers(owner, scope, period), oss(owner, scope, period),
+                scope.linkId() == null ? topLinks(owner, scope, period) : List.of(),
+                recent(owner, scope, period, 50), exceedsRetention(period));
     }
 
-    private List<Count> top(String column, String fallback, User owner, UUID linkId, StatsPeriod period) {
+    private List<Count> top(String column, String fallback, User owner, StatsScope scope, StatsPeriod period) {
         return visitQuery("select " + column + ", count(v) from Visit v",
-                "group by " + column + " order by count(v) desc, " + column, owner, linkId, period)
+                "group by " + column + " order by count(v) desc, " + column, owner, scope, period)
                 .setMaxResults(TOP).getResultList().stream()
                 .map(r -> new Count(r[0] == null ? fallback : r[0].toString(), ((Number) r[1]).longValue())).toList();
     }
@@ -219,25 +217,23 @@ public class StatsQuery {
         return LocalDate.now(clock.withZone(zone)).minusDays(period.days() - 1L).atStartOfDay(zone).toInstant();
     }
 
-    private TypedQuery<Object[]> visitQuery(String select, String tail, User owner, UUID linkId, StatsPeriod period) {
-        return visitQuery(select, tail, Object[].class, owner, linkId, period);
+    private TypedQuery<Object[]> visitQuery(String select, String tail, User owner, StatsScope scope, StatsPeriod period) {
+        return visitQuery(select, tail, Object[].class, owner, scope, period);
     }
 
-    private <T> TypedQuery<T> visitQuery(String select, String tail, Class<T> type, User owner, UUID linkId,
+    private <T> TypedQuery<T> visitQuery(String select, String tail, Class<T> type, User owner, StatsScope scope,
                                          StatsPeriod period) {
-        return visitQuery(select, tail, type, owner, linkId, periodStart(period), clock.instant());
+        return visitQuery(select, tail, type, owner, scope, periodStart(period), clock.instant());
     }
 
     /** Fragments JPQL constants uniquement ; toutes les valeurs passent par des paramètres. */
-    private <T> TypedQuery<T> visitQuery(String select, String tail, Class<T> type, User owner, UUID linkId,
+    private <T> TypedQuery<T> visitQuery(String select, String tail, Class<T> type, User owner, StatsScope scope,
                                          Instant from, Instant to) {
-        String jpql = select + " where v.owner = :owner" + (linkId == null ? "" : " and v.link.id = :linkId")
+        String jpql = select + " where v.owner = :owner" + scope.clause("v")
                 + " and v.occurredAt >= :from and v.occurredAt <= :to " + tail;
         TypedQuery<T> query = em.createQuery(jpql, type)
                 .setParameter("owner", owner).setParameter("from", from).setParameter("to", to);
-        if (linkId != null) {
-            query.setParameter("linkId", linkId);
-        }
+        scope.bind(query);
         return query;
     }
 }

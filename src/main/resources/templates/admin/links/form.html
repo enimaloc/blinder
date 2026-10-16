@@ -39,6 +39,12 @@
         <label for="deniedUrl">URL en cas de refus (optionnel)</label>
         <input id="deniedUrl" type="url" th:field="*{deniedUrl}">
         <p class="error" th:errors="*{deniedUrl}"></p>
+        <label for="tags">Tags (séparés par des virgules)</label>
+        <input id="tags" list="tag-options" th:field="*{tags}" maxlength="1000" autocomplete="off">
+        <datalist id="tag-options">
+            <option th:each="t : ${allTags}" th:value="${t.name}"></option>
+        </datalist>
+        <p class="error" th:errors="*{tags}"></p>
         <fieldset>
             <legend>Protection (un seul moyen valide suffit)</legend>
             <label for="newPassword" th:text="${hasPassword} ? 'Nouveau mot de passe (vide = conserver)' : 'Mot de passe (optionnel)'">Mot de passe</label>
@@ -116,6 +122,11 @@
         <p><button type="submit">Enregistrer</button></p>
     </form>
     <th:block th:if="${linkId != null}">
+        <section class="qr">
+            <img th:src="@{/_/links/{id}/qr.svg(id=${linkId})}" alt="QR code du lien" width="200" height="200">
+            <p>QR code : <a th:href="@{/_/links/{id}/qr.svg(id=${linkId},download='')}">SVG</a>
+                · <a th:href="@{/_/links/{id}/qr.png(id=${linkId},download='')}">PNG</a></p>
+        </section>
         <form class="inline" th:action="@{/_/links/{id}/reset(id=${linkId})}" method="post">
             <button type="submit">Réinitialiser le compteur</button>
         </form>

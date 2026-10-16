@@ -7,17 +7,19 @@ import fr.enimaloc.blinder.device.DeviceService;
 import fr.enimaloc.blinder.domain.Domain;
 import fr.enimaloc.blinder.domain.DomainService;
 import fr.enimaloc.blinder.link.Link;
+import fr.enimaloc.blinder.link.LinkEditService;
 import fr.enimaloc.blinder.link.LinkForm;
 import fr.enimaloc.blinder.link.LinkService;
 import fr.enimaloc.blinder.link.preview.LinkPreviewService;
 import fr.enimaloc.blinder.notification.ChannelService;
 import fr.enimaloc.blinder.notification.LinkNotificationService;
 import fr.enimaloc.blinder.common.StaleEditException;
+import fr.enimaloc.blinder.tag.Tag;
+import fr.enimaloc.blinder.tag.TagService;
 import fr.enimaloc.blinder.user.CurrentUser;
 import fr.enimaloc.blinder.user.User;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.stereotype.Controller;
@@ -36,7 +38,6 @@ import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.UUID;
 
-@Slf4j
 @Controller
 @RequestMapping("/_")
 @RequiredArgsConstructor
@@ -46,6 +47,7 @@ public class LinkAdminController {
 
     private final CurrentUser currentUser;
     private final LinkService links;
+    private final LinkEditService edits;
     private final DomainService domains;
     private final LinkStatusResolver statuses;
     private final DeviceService deviceService;
@@ -53,16 +55,20 @@ public class LinkAdminController {
     private final BlinderProperties properties;
     private final LinkNotificationService linkNotifications;
     private final ChannelService channels;
+    private final TagService tags;
 
     @GetMapping("/")
-    public String list(@RequestParam(name = "domain", required = false) UUID domainId, Model model) {
+    public String list(@RequestParam(name = "domain", required = false) UUID domainId,
+                       @RequestParam(name = "tag", required = false) UUID tagId, Model model) {
         User owner = currentUser.require();
-        List<LinkRow> rows = links.list(owner, domainId).stream()
-                .map(link -> new LinkRow(link, statuses.statusOf(link)))
+        List<LinkRow> rows = links.list(owner, domainId, tagId).stream()
+                .map(link -> new LinkRow(link, statuses.statusOf(link), sortedTags(link)))
                 .toList();
         model.addAttribute("rows", rows);
         model.addAttribute("domains", domains.list(owner));
+        model.addAttribute("allTags", tags.list(owner));
         model.addAttribute("selectedDomain", domainId);
+        model.addAttribute("selectedTag", tagId);
         return "admin/links/list";
     }
 
@@ -76,6 +82,7 @@ public class LinkAdminController {
         }
         linkNotifications.preselect(owner, form);
         model.addAttribute("form", form);
+        model.addAttribute("allTags", tags.list(owner));
         model.addAttribute("channels", channels.list(owner));
         model.addAttribute("domains", owned);
         model.addAttribute("devices", deviceService.all(owner));
@@ -90,6 +97,7 @@ public class LinkAdminController {
         User owner = currentUser.require();
         model.addAttribute("domains", domains.list(owner));
         model.addAttribute("channels", channels.list(owner));
+        model.addAttribute("allTags", tags.list(owner));
         model.addAttribute("devices", deviceService.all(owner));
         model.addAttribute("hasPassword", false);
         model.addAttribute("limitedOrProtected", form.declaresLimitOrProtection(false));
@@ -97,11 +105,9 @@ public class LinkAdminController {
             return "admin/links/form";
         }
         try {
-            linkNotifications.validate(owner, form);
-            Link created = links.create(owner, form);
-            linkNotifications.apply(owner, created, form);
+            Link created = edits.create(owner, form);
             warnIfExposed(flash, created);
-            refreshPreviewQuietly(owner, created);
+            edits.refreshPreviewAfterSave(owner, created, null);
         } catch (FieldErrorException e) {
             binding.rejectValue(e.field(), "invalid", e.getMessage());
             return "admin/links/form";
@@ -118,6 +124,7 @@ public class LinkAdminController {
         Link link = links.get(owner, id);
         LinkForm form = links.toForm(link);
         linkNotifications.fillForm(form, id);
+        form.setTags(tags.format(link));
         model.addAttribute("form", form);
         populateEdit(model, owner, link);
         return "admin/links/form";
@@ -137,14 +144,9 @@ public class LinkAdminController {
         try {
             // `current` vient d'un chargement distinct de celui de update() (open-in-view désactivé)
             String previousTarget = current.getTargetUrl();
-            linkNotifications.validate(owner, form);
-            Link updated = links.update(owner, id, form);
-            linkNotifications.apply(owner, updated, form);
+            Link updated = edits.update(owner, id, form);
             warnIfExposed(flash, updated);
-            if (!previousTarget.equals(updated.getTargetUrl())) {
-                previews.discard(id);
-            }
-            refreshPreviewQuietly(owner, updated);
+            edits.refreshPreviewAfterSave(owner, updated, previousTarget);
         } catch (FieldErrorException e) {
             binding.rejectValue(e.field(), "invalid", e.getMessage());
             return "admin/links/form";
@@ -160,7 +162,7 @@ public class LinkAdminController {
 
     @PostMapping("/links/{id}/reset")
     public String reset(@PathVariable UUID id) {
-        links.resetUsage(currentUser.require(), id);
+        edits.resetUsage(currentUser.require(), id);
         return "redirect:/_/links/" + id;
     }
 
@@ -179,6 +181,7 @@ public class LinkAdminController {
     private void populateEdit(Model model, User owner, Link link) {
         model.addAttribute("linkId", link.getId());
         model.addAttribute("channels", channels.list(owner));
+        model.addAttribute("allTags", tags.list(owner));
         model.addAttribute("useCount", link.getUseCount());
         model.addAttribute("status", statuses.statusOf(link));
         model.addAttribute("publicUrl", link.getDomain().getHost() + "/" + link.getSlug());
@@ -193,16 +196,8 @@ public class LinkAdminController {
                 : PREVIEW_DATE.format(preview.getFetchedAt().atZone(properties.admin().timeZone())));
     }
 
-    /** Le lien est déjà enregistré : un échec de l'aperçu ne doit jamais faire échouer l'enregistrement. */
-    private void refreshPreviewQuietly(User owner, Link saved) {
-        if (saved.getMetaMode() != MetaMode.PASSTHROUGH) {
-            return;
-        }
-        try {
-            previews.refresh(owner, saved.getId());
-        } catch (RuntimeException e) {
-            log.warn("Preview refresh failed for link {}", saved.getId(), e);
-        }
+    private static List<Tag> sortedTags(Link link) {
+        return link.getTags().stream().sorted(java.util.Comparator.comparing(Tag::getNameKey)).toList();
     }
 
     private static void warnIfExposed(RedirectAttributes flash, Link saved) {

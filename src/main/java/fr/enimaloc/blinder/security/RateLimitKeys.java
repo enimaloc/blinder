@@ -45,6 +45,10 @@ public final class RateLimitKeys {
         return "admin-login:" + client(remoteAddr);
     }
 
+    public static String apiAuth(String remoteAddr) {
+        return "api-auth:" + client(remoteAddr);
+    }
+
     private static String formatIpv6Prefix(byte[] bytes) {
         // IPv6 /64 : first 4 hextets (first 8 bytes)
         StringBuilder sb = new StringBuilder();

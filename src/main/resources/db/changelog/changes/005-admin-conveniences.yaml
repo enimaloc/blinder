@@ -1,0 +1,50 @@
+databaseChangeLog:
+  - changeSet:
+      id: 005-admin-conveniences
+      author: blinder
+      changes:
+        - createTable:
+            tableName: tags
+            columns:
+              - column: { name: id, type: char(36), constraints: { primaryKey: true, nullable: false } }
+              - column: { name: created_at, type: "${timestamp.type}", constraints: { nullable: false } }
+              - column: { name: updated_at, type: "${timestamp.type}", constraints: { nullable: false } }
+              - column: { name: version, type: bigint, constraints: { nullable: false } }
+              - column: { name: owner_id, type: char(36), constraints: { nullable: false, foreignKeyName: fk_tags_owner, references: users(id), deleteCascade: true } }
+              - column: { name: name, type: varchar(40), constraints: { nullable: false } }
+              - column: { name: name_key, type: varchar(40), constraints: { nullable: false } }
+              - column: { name: color, type: varchar(7) }
+        - createIndex:
+            tableName: tags
+            indexName: uk_tags_owner_name_key
+            unique: true
+            columns:
+              - column: { name: owner_id }
+              - column: { name: name_key }
+        - createTable:
+            tableName: link_tags
+            columns:
+              - column: { name: link_id, type: char(36), constraints: { nullable: false, primaryKey: true, primaryKeyName: pk_link_tags, foreignKeyName: fk_link_tags_link, references: links(id), deleteCascade: true } }
+              - column: { name: tag_id, type: char(36), constraints: { nullable: false, primaryKey: true, primaryKeyName: pk_link_tags, foreignKeyName: fk_link_tags_tag, references: tags(id), deleteCascade: true } }
+        - createIndex:
+            tableName: link_tags
+            indexName: idx_link_tags_tag
+            columns:
+              - column: { name: tag_id }
+        - createTable:
+            tableName: api_tokens
+            columns:
+              - column: { name: id, type: char(36), constraints: { primaryKey: true, nullable: false } }
+              - column: { name: created_at, type: "${timestamp.type}", constraints: { nullable: false } }
+              - column: { name: updated_at, type: "${timestamp.type}", constraints: { nullable: false } }
+              - column: { name: version, type: bigint, constraints: { nullable: false } }
+              - column: { name: owner_id, type: char(36), constraints: { nullable: false, foreignKeyName: fk_api_tokens_owner, references: users(id), deleteCascade: true } }
+              - column: { name: name, type: varchar(100), constraints: { nullable: false } }
+              - column: { name: token_prefix, type: varchar(16), constraints: { nullable: false } }
+              - column: { name: token_hash, type: varchar(64), constraints: { nullable: false, unique: true, uniqueConstraintName: uk_api_tokens_hash } }
+              - column: { name: last_used_at, type: "${timestamp.type}" }
+        - createIndex:
+            tableName: api_tokens
+            indexName: idx_api_tokens_owner
+            columns:
+              - column: { name: owner_id }
