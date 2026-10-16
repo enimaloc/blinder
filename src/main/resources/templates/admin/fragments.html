@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="fr" xmlns:th="http://www.thymeleaf.org">
+<head th:fragment="head(title)">
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="robots" content="noindex">
+    <title th:text="${title} + ' · Blinder'">Blinder</title>
+    <link rel="stylesheet" th:href="@{/_/admin.css}">
+</head>
+<body>
+<nav th:fragment="nav">
+    <a th:href="@{/_/}">Liens</a>
+    <a th:href="@{/_/domains}">Domaines</a>
+    <a th:href="@{/_/account}">Compte</a>
+    <form class="inline" th:action="@{/_/logout}" method="post">
+        <button type="submit">Déconnexion</button>
+    </form>
+</nav>
+</body>
+</html>
