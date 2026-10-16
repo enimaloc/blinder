@@ -6,6 +6,7 @@ import fr.enimaloc.blinder.stats.Visit;
 import fr.enimaloc.blinder.stats.VisitOutcome;
 import fr.enimaloc.blinder.stats.VisitRepository;
 import fr.enimaloc.blinder.support.TestData;
+import fr.enimaloc.blinder.tag.Tag;
 import fr.enimaloc.blinder.user.BlinderUserDetails;
 import fr.enimaloc.blinder.user.User;
 import org.junit.jupiter.api.BeforeEach;
@@ -20,6 +21,7 @@ import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
@@ -107,7 +109,7 @@ class StatsAdminTest {
     void anonymousIsRedirectedToLogin() throws Exception {
         mvc.perform(get("/_/stats")).andExpect(status().is3xxRedirection());
         mvc.perform(get("/_/stats.csv")).andExpect(status().is3xxRedirection());
-        mvc.perform(get("/_/vendor/chart.js/4.5.1/dist/chart.umd.js")).andExpect(status().is3xxRedirection());
+        mvc.perform(get("/_/vendor/chart.js/dist/chart.umd.js")).andExpect(status().is3xxRedirection());
     }
 
     @Test
@@ -143,15 +145,9 @@ class StatsAdminTest {
     }
 
     @Test
-    void chartScriptIsServedToLoggedInAdmin() throws Exception {
-        mvc.perform(get("/_/vendor/chart.js/4.5.1/dist/chart.umd.js").with(login(admin)))
-                .andExpect(status().isOk());
-    }
-
-    @Test
     void tagFilterRestrictsGlobalPageAndCsv() throws Exception {
         Link tagged = data.link(link.getDomain(), "tgd", "https://example.com");
-        fr.enimaloc.blinder.tag.Tag promo = data.tag(admin, "promo");
+        Tag promo = data.tag(admin, "promo");
         data.tagLink(tagged, promo);
         Instant now = Instant.now().minusSeconds(30);
         data.visit(link, VisitOutcome.REDIRECTED, now, "203.0.113.1");
@@ -171,7 +167,7 @@ class StatsAdminTest {
 
     @Test
     void tagCsvFileNameIsTransliteratedAndCarriesTheUtf8Name() throws Exception {
-        fr.enimaloc.blinder.tag.Tag ete = data.tag(admin, "Été 2026");
+        Tag ete = data.tag(admin, "Été 2026");
         String header = mvc.perform(get("/_/stats.csv").param("tag", ete.getId().toString()).with(login(admin)))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getHeader("Content-Disposition");
@@ -180,34 +176,24 @@ class StatsAdminTest {
     }
 
     @Test
-    void webjarsAreNotServedPubliclyButTheAdminVendorPathIs() throws Exception {
-        String asset = "chart.js/" + chartJsVersion() + "/dist/chart.umd.js";
+    void chartScriptIsServedWithoutVersionToAdminOnlyAndWebjarsPathIsGone() throws Exception {
+        String asset = "chart.js/dist/chart.umd.js";
         mvc.perform(get("/webjars/" + asset)).andExpect(status().isNotFound());
         mvc.perform(get("/webjars/" + asset).with(login(admin))).andExpect(status().isNotFound());
         mvc.perform(get("/_/vendor/" + asset)).andExpect(status().is3xxRedirection())
                 .andExpect(header().string("Location", containsString("/_/login")));
-        mvc.perform(get("/_/vendor/" + asset).with(login(admin))).andExpect(status().isOk());
-    }
-
-    /** Version du webjar Chart.js lue sur le classpath, pour ne pas la recopier ici. */
-    private static String chartJsVersion() throws java.io.IOException {
-        try (java.io.InputStream in = StatsAdminTest.class.getResourceAsStream(
-                "/META-INF/maven/org.webjars.npm/chart.js/pom.properties")) {
-            assertThat(in).as("webjar Chart.js absent du classpath").isNotNull();
-            java.util.Properties properties = new java.util.Properties();
-            properties.load(in);
-            return properties.getProperty("version");
-        }
+        mvc.perform(get("/_/vendor/" + asset).with(login(admin))).andExpect(status().isOk())
+                .andExpect(header().string("Content-Type", containsString("javascript")));
     }
 
     @Test
     void foreignOrUnknownTagIs404() throws Exception {
-        fr.enimaloc.blinder.tag.Tag theirs = data.tag(data.admin("other"), "promo");
+        Tag theirs = data.tag(data.admin("other"), "promo");
         mvc.perform(get("/_/stats").param("tag", theirs.getId().toString()).with(login(admin)))
                 .andExpect(status().isNotFound());
         mvc.perform(get("/_/stats.csv").param("tag", theirs.getId().toString()).with(login(admin)))
                 .andExpect(status().isNotFound());
-        mvc.perform(get("/_/stats").param("tag", java.util.UUID.randomUUID().toString()).with(login(admin)))
+        mvc.perform(get("/_/stats").param("tag", UUID.randomUUID().toString()).with(login(admin)))
                 .andExpect(status().isNotFound());
     }
 }
