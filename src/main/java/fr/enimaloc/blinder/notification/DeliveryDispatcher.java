@@ -45,7 +45,7 @@ public class DeliveryDispatcher {
         dispatch(Instant.now(clock));
     }
 
-    void dispatch(Instant now) {
+    public void dispatch(Instant now) {
         if (!running.compareAndSet(false, true)) {
             return;
         }
