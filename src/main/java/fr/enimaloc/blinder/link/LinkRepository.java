@@ -4,7 +4,11 @@ import fr.enimaloc.blinder.domain.Domain;
 import fr.enimaloc.blinder.user.User;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -25,4 +29,20 @@ public interface LinkRepository extends JpaRepository<Link, UUID> {
 
     @EntityGraph(attributePaths = "domain")
     Optional<Link> findByIdAndOwner(UUID id, User owner);
+
+    /**
+     * Incrément atomique et conditionnel, portable H2/SQLite/PostgreSQL.
+     * Ne passe pas par le verrou optimiste (UPDATE JPQL non versionné).
+     *
+     * @return nombre de lignes affectées (0 si épuisé)
+     */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("""
+            update Link l
+               set l.useCount = l.useCount + 1,
+                   l.firstUsedAt = coalesce(l.firstUsedAt, :now)
+             where l.id = :id
+               and (l.maxUses is null or l.useCount < l.maxUses)
+            """)
+    int consume(@Param("id") UUID id, @Param("now") Instant now);
 }
