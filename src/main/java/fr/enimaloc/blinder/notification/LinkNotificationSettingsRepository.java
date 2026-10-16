@@ -4,6 +4,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -15,6 +16,9 @@ public interface LinkNotificationSettingsRepository extends JpaRepository<LinkNo
 
     @Query("select s from LinkNotificationSettings s left join fetch s.channels where s.link.id = :linkId")
     Optional<LinkNotificationSettings> findWithChannelsByLinkId(@Param("linkId") UUID linkId);
+
+    @Query("select distinct s from LinkNotificationSettings s left join fetch s.channels where s.link.id in :linkIds")
+    List<LinkNotificationSettings> findWithChannelsByLinkIdIn(@Param("linkIds") Collection<UUID> linkIds);
 
     /** Liens dont l'expiration doit être notifiée et ne l'a pas déjà été. */
     @Query("select s from LinkNotificationSettings s join fetch s.link where s.onExpired = true "

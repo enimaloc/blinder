@@ -35,6 +35,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.EnumSet;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -139,6 +140,16 @@ public class LinkService {
     @Transactional(readOnly = true)
     public List<UUID> deviceIds(UUID linkId) {
         return links.findDeviceIds(linkId);
+    }
+
+    /** Appareils autorisés de chaque lien, en une requête ; un lien sans appareil n'a pas d'entrée. */
+    @Transactional(readOnly = true)
+    public Map<UUID, List<UUID>> deviceIds(Collection<UUID> linkIds) {
+        if (linkIds.isEmpty()) {
+            return Map.of();
+        }
+        return links.findDeviceIdPairs(linkIds).stream().collect(Collectors.groupingBy(
+                row -> (UUID) row[0], Collectors.mapping(row -> (UUID) row[1], Collectors.toList())));
     }
 
     @Transactional(readOnly = true)

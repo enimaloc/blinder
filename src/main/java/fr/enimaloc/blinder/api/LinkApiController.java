@@ -73,7 +73,7 @@ public class LinkApiController {
         }
         var result = links.search(currentUser.require(), domainId, tagId, q,
                 PageRequest.of(page, Math.min(size, MAX_SIZE)));
-        return PageResource.of(result, link -> resource(link, request));
+        return PageResource.of(result, content -> mapper.toResources(content, link -> PublicLinkUrls.of(request, link)));
     }
 
     @GetMapping("/{id}")

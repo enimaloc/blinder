@@ -122,6 +122,8 @@ abstract class AbstractPersistenceTest {
     LinkService linkService;
     @Autowired
     fr.enimaloc.blinder.link.LinkEditService linkEdits;
+    @Autowired
+    fr.enimaloc.blinder.notification.LinkNotificationService linkNotifications;
 
     User owner;
     Domain domain;
@@ -735,5 +737,34 @@ abstract class AbstractPersistenceTest {
         assertThat(apiTokens.touch(token.getId(), now.plusSeconds(10), now.minusSeconds(50))).isZero();
         assertThat(apiTokens.touch(token.getId(), now.plusSeconds(120), now.plusSeconds(60))).isEqualTo(1);
         assertThat(apiTokens.findById(token.getId()).orElseThrow().getLastUsedAt()).isEqualTo(now.plusSeconds(120));
+    }
+
+    @Test
+    void loadsDevicesAndNotificationSettingsOfSeveralLinksAtOnce() {
+        Link first = data.link(domain, "un", "https://example.com/1");
+        Link second = data.link(domain, "deux", "https://example.com/2");
+        Link bare = data.link(domain, "trois", "https://example.com/3");
+        Device phone = data.device(owner, "phone");
+        Device laptop = data.device(owner, "laptop");
+        data.allowDevice(first, phone);
+        data.allowDevice(first, laptop);
+        data.allowDevice(second, laptop);
+        NotificationChannel hook = data.channel(owner, "hook", ChannelType.WEBHOOK, "https://hooks.example/a");
+        LinkNotificationSettings settings = new LinkNotificationSettings(links.getReferenceById(second.getId()));
+        settings.setOnExpired(true);
+        settings.setChannels(new java.util.HashSet<>(Set.of(hook)));
+        settingsRepository.saveAndFlush(settings);
+        List<UUID> ids = List.of(first.getId(), second.getId(), bare.getId());
+
+        var devicesByLink = linkService.deviceIds(ids);
+        assertThat(devicesByLink.get(first.getId())).containsExactlyInAnyOrder(phone.getId(), laptop.getId());
+        assertThat(devicesByLink.get(second.getId())).containsExactly(laptop.getId());
+        assertThat(devicesByLink).doesNotContainKey(bare.getId());
+
+        var settingsByLink = linkNotifications.settingsFor(ids);
+        assertThat(settingsByLink).containsOnlyKeys(second.getId());
+        assertThat(settingsByLink.get(second.getId()).isOnExpired()).isTrue();
+        assertThat(settingsByLink.get(second.getId()).getChannels()).extracting(NotificationChannel::getId)
+                .containsExactly(hook.getId());
     }
 }

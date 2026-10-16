@@ -9,13 +9,16 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Collection;
 import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @Service
@@ -30,6 +33,16 @@ public class LinkNotificationService {
     @Transactional(readOnly = true)
     public Optional<LinkNotificationSettings> settingsFor(UUID linkId) {
         return settings.findWithChannelsByLinkId(linkId);
+    }
+
+    /** Réglages (canaux chargés) de chaque lien, en une requête ; un lien sans réglage n'a pas d'entrée. */
+    @Transactional(readOnly = true)
+    public Map<UUID, LinkNotificationSettings> settingsFor(Collection<UUID> linkIds) {
+        if (linkIds.isEmpty()) {
+            return Map.of();
+        }
+        return settings.findWithChannelsByLinkIdIn(linkIds).stream()
+                .collect(Collectors.toMap(s -> s.getLink().getId(), Function.identity()));
     }
 
     /** Vérifie les canaux choisis avant toute écriture du lien. */

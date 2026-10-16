@@ -7,6 +7,7 @@ import fr.enimaloc.blinder.link.Link;
 import fr.enimaloc.blinder.link.LinkForm;
 import fr.enimaloc.blinder.link.LinkService;
 import fr.enimaloc.blinder.notification.LinkNotificationService;
+import fr.enimaloc.blinder.notification.LinkNotificationSettings;
 import fr.enimaloc.blinder.notification.NotificationChannel;
 import fr.enimaloc.blinder.tag.Tag;
 import jakarta.validation.ConstraintViolation;
@@ -24,7 +25,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.TreeMap;
+import java.util.UUID;
 import java.util.function.Consumer;
+import java.util.function.Function;
 
 /**
  * Conversions entre l'API et le formulaire du panel ({@link LinkForm}), pour que l'API passe par les mêmes règles.
@@ -75,11 +78,29 @@ public class LinkApiMapper {
      * {@code link.domain} et {@code link.tags} doivent être chargés.
      */
     public LinkResource toResource(Link link, String url) {
-        LinkResource.Notifications notify = notifications.settingsFor(link.getId())
-                .map(s -> new LinkResource.Notifications(s.isOnExhausted(), s.isOnExpired(), s.isOnDenials(),
-                        s.isOnEachVisit(), s.getVisitThreshold(),
-                        s.getChannels().stream().map(NotificationChannel::getId).sorted().toList()))
-                .orElse(LinkResource.Notifications.NONE);
+        return toResource(link, url, notifications.settingsFor(link.getId()).orElse(null),
+                links.deviceIds(link.getId()));
+    }
+
+    /**
+     * Représentations d'une page de liens : réglages de notification et appareils chargés en une requête chacun,
+     * quel que soit le nombre de liens. {@code link.domain} et {@code link.tags} doivent être chargés.
+     *
+     * @param url URL publique de chaque lien
+     */
+    public List<LinkResource> toResources(List<Link> page, Function<Link, String> url) {
+        List<UUID> ids = page.stream().map(Link::getId).toList();
+        Map<UUID, LinkNotificationSettings> settings = notifications.settingsFor(ids);
+        Map<UUID, List<UUID>> devices = links.deviceIds(ids);
+        return page.stream().map(link -> toResource(link, url.apply(link), settings.get(link.getId()),
+                devices.getOrDefault(link.getId(), List.of()))).toList();
+    }
+
+    private LinkResource toResource(Link link, String url, LinkNotificationSettings settings, List<UUID> deviceIds) {
+        LinkResource.Notifications notify = settings == null ? LinkResource.Notifications.NONE
+                : new LinkResource.Notifications(settings.isOnExhausted(), settings.isOnExpired(),
+                        settings.isOnDenials(), settings.isOnEachVisit(), settings.getVisitThreshold(),
+                        settings.getChannels().stream().map(NotificationChannel::getId).sorted().toList());
         return new LinkResource(
                 link.getId(),
                 link.getDomain().getId(),
@@ -98,7 +119,7 @@ public class LinkApiMapper {
                 link.getIpAllowlist() == null ? List.of()
                         : Arrays.stream(link.getIpAllowlist().split(",")).filter(s -> !s.isBlank()).toList(),
                 link.isDeviceProtected(),
-                links.deviceIds(link.getId()).stream().sorted().toList(),
+                deviceIds.stream().sorted().toList(),
                 link.getRedirectStatus(),
                 link.isForwardQuery(),
                 link.isInterstitial(),
