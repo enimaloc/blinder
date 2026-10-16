@@ -5,6 +5,7 @@ import org.springframework.stereotype.Component;
 
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 
 @Component
 public class BotDetector {
@@ -13,7 +14,9 @@ public class BotDetector {
 
     public BotDetector(BlinderProperties properties) {
         this.needles = properties.bots().userAgents().stream()
-                .map(s -> s.toLowerCase(Locale.ROOT))
+                .filter(Objects::nonNull)
+                .map(s -> s.trim().toLowerCase(Locale.ROOT))
+                .filter(s -> !s.isEmpty())
                 .toList();
     }
 

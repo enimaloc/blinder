@@ -1,6 +1,7 @@
 package fr.enimaloc.blinder.access;
 
 import fr.enimaloc.blinder.common.BlinderProperties;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -31,5 +32,17 @@ class BotDetectorTest {
     @ValueSource(strings = {"Mozilla/5.0 (X11; Linux x86_64) Firefox/140.0"})
     void humansAreNotBots(String ua) {
         assertThat(detector.isBot(ua)).isFalse();
+    }
+
+    @Test
+    void blankNeedlesDoNotClassifyEveryoneAsBot() {
+        BotDetector lenient = new BotDetector(new BlinderProperties(
+                new BlinderProperties.Admin(null, ZoneOffset.UTC),
+                new BlinderProperties.Slug(7, List.of()),
+                new BlinderProperties.Bots(List.of("Discordbot", "", "  ", " Slackbot "))));
+
+        assertThat(lenient.isBot("Mozilla/5.0 (X11; Linux x86_64) Firefox/140.0")).isFalse();
+        assertThat(lenient.isBot("Discordbot/2.0")).isTrue();
+        assertThat(lenient.isBot("Slackbot-LinkExpanding 1.0")).isTrue();
     }
 }
