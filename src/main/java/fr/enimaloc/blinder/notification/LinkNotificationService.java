@@ -45,7 +45,9 @@ public class LinkNotificationService {
             return Map.of();
         }
         return settings.findWithChannelsByOwnerAndLinkIdIn(owner, linkIds).stream()
-                .collect(Collectors.toMap(s -> s.getLink().getId(), Function.identity()));
+                // Fusion explicite : en cas de doublon (que la contrainte d'unicité en base interdit), on garde le premier
+                // réglage plutôt que de faire échouer toute la page de liste.
+                .collect(Collectors.toMap(s -> s.getLink().getId(), Function.identity(), (first, duplicate) -> first));
     }
 
     /** Vérifie les canaux choisis avant toute écriture du lien. */
