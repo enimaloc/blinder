@@ -2,6 +2,7 @@ package fr.enimaloc.blinder.redirect;
 
 import fr.enimaloc.blinder.access.BotDetector;
 import fr.enimaloc.blinder.access.VisitContext;
+import fr.enimaloc.blinder.device.DeviceCookieService;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
@@ -19,6 +20,7 @@ public class VisitContextFactory {
 
     private final Clock clock;
     private final BotDetector botDetector;
+    private final DeviceCookieService deviceCookies;
 
     public VisitContext from(HttpServletRequest request) {
         String userAgent = request.getHeader(HttpHeaders.USER_AGENT);
@@ -29,7 +31,7 @@ public class VisitContextFactory {
                 request.getMethod(),
                 Instant.now(clock),
                 submittedPassword(request),
-                null);
+                deviceCookies.authenticate(request).orElse(null));
     }
 
     private static String submittedPassword(HttpServletRequest request) {
