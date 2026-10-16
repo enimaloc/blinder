@@ -75,19 +75,45 @@ class ApiExceptionResolverTest {
         assertThat(appender.list).extracting(ILoggingEvent::getLevel).containsExactly(Level.ERROR);
     }
 
-    @Test
-    void committedResponseIsLeftUntouched() throws IOException {
+    private MockHttpServletResponse committedResponse() throws IOException {
         MockHttpServletResponse response = new MockHttpServletResponse();
         response.getWriter().write("partiel");
         response.flushBuffer();
         assertThat(response.isCommitted()).isTrue();
+        return response;
+    }
+
+    @Test
+    void committedResponseIsLeftUntouchedAndTheExceptionReachesTheContainer() throws IOException {
+        MockHttpServletResponse response = committedResponse();
 
         ModelAndView result = resolver.resolveException(apiRequest(), response, null, new IllegalStateException("boom"));
 
-        assertThat(result).isNotNull();
+        assertThat(result).isNull();
         assertThat(response.getContentAsString()).isEqualTo("partiel");
         assertThat(response.getStatus()).isEqualTo(200);
         assertThat(response.getContentType()).isNull();
+    }
+
+    @Test
+    void committedResponseLogsAWarningExceptForClientDisconnects() throws IOException {
+        Logger logger = (Logger) LoggerFactory.getLogger(ApiExceptionResolver.class);
+        Level previous = logger.getLevel();
+        logger.setLevel(Level.DEBUG);
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        logger.addAppender(appender);
+        try {
+            assertThat(resolver.resolveException(apiRequest(), committedResponse(), null,
+                    new IOException("Broken pipe"))).isNull();
+            resolver.resolveException(apiRequest(), committedResponse(), null, new IllegalStateException("boom"));
+        } finally {
+            logger.detachAppender(appender);
+            logger.setLevel(previous);
+        }
+
+        assertThat(appender.list).extracting(ILoggingEvent::getLevel).containsExactly(Level.DEBUG, Level.WARN);
+        assertThat(appender.list.get(0).getThrowableProxy()).isNull();
     }
 
     @Test
