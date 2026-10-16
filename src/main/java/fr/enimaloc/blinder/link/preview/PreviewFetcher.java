@@ -25,9 +25,8 @@ import java.net.UnknownHostException;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.Optional;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -42,13 +41,14 @@ public class PreviewFetcher implements AutoCloseable {
     static final String USER_AGENT = "BlinderPreview/1.0";
 
     private final CloseableHttpClient client;
-    private final ScheduledExecutorService watchdog = Executors.newSingleThreadScheduledExecutor(runnable -> {
+    private final ScheduledThreadPoolExecutor watchdog = new ScheduledThreadPoolExecutor(1, runnable -> {
         Thread thread = new Thread(runnable, "preview-watchdog");
         thread.setDaemon(true);
         return thread;
     });
 
     public PreviewFetcher(AddressPolicy policy) {
+        watchdog.setRemoveOnCancelPolicy(true);
         DnsResolver resolver = new DnsResolver() {
             @Override
             public InetAddress[] resolve(String host) throws UnknownHostException {
