@@ -41,12 +41,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 /**
  * Nombre de requêtes SQL des pages de liste : il ne doit pas dépendre du nombre de lignes affichées (pas de N+1).
- * Statistiques Hibernate activées pour ce seul contexte de test.
+ * Statistiques Hibernate activées pour ce seul contexte de test. Le même scénario tourne sur H2, SQLite et PostgreSQL
+ * (sous-classes), car le plan de requêtes peut différer selon le dialecte.
  */
 @SpringBootTest(properties = "spring.jpa.properties.hibernate.generate_statistics=true")
 @AutoConfigureMockMvc
 @Import(TestData.class)
-class QueryCountTest {
+abstract class QueryCountTest {
 
     @Autowired
     MockMvc mvc;
