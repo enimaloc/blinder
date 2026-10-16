@@ -6,6 +6,7 @@ import fr.enimaloc.blinder.device.Device;
 import fr.enimaloc.blinder.device.DeviceCredentialRepository;
 import fr.enimaloc.blinder.device.DeviceEnrollmentRepository;
 import fr.enimaloc.blinder.device.DeviceRepository;
+import fr.enimaloc.blinder.device.DeviceRow;
 import fr.enimaloc.blinder.device.DeviceTokens;
 import fr.enimaloc.blinder.domain.Domain;
 import fr.enimaloc.blinder.access.DenyReason;
@@ -42,6 +43,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -120,6 +122,12 @@ abstract class AbstractPersistenceTest {
 
     @Autowired
     LinkService linkService;
+    @Autowired
+    fr.enimaloc.blinder.link.LinkEditService linkEdits;
+    @Autowired
+    fr.enimaloc.blinder.notification.LinkNotificationService linkNotifications;
+    @Autowired
+    fr.enimaloc.blinder.device.DeviceService deviceService;
 
     User owner;
     Domain domain;
@@ -159,6 +167,20 @@ abstract class AbstractPersistenceTest {
         assertThat(found.getCreatedAt()).isNotNull();
         assertThat(found.getVersion()).isNotNull();
         assertThat(found.getDomain().getId()).isEqualTo(domain.getId());
+    }
+
+    @Test
+    void notificationOnlyEditBumpsLinkVersion() {
+        Link link = data.link(domain, "notif", "https://example.com/n");
+        long before = links.findById(link.getId()).orElseThrow().getVersion();
+        fr.enimaloc.blinder.link.LinkForm form = new fr.enimaloc.blinder.link.LinkForm();
+        form.setDomainId(domain.getId());
+        form.setSlug("notif");
+        form.setTargetUrl("https://example.com/n");
+        form.setVersion(before);
+        form.setNotifyExhausted(true);
+        linkEdits.update(owner, link.getId(), form);
+        assertThat(links.findById(link.getId()).orElseThrow().getVersion()).isGreaterThan(before);
     }
 
     @Test
@@ -719,5 +741,71 @@ abstract class AbstractPersistenceTest {
         assertThat(apiTokens.touch(token.getId(), now.plusSeconds(10), now.minusSeconds(50))).isZero();
         assertThat(apiTokens.touch(token.getId(), now.plusSeconds(120), now.plusSeconds(60))).isEqualTo(1);
         assertThat(apiTokens.findById(token.getId()).orElseThrow().getLastUsedAt()).isEqualTo(now.plusSeconds(120));
+    }
+
+    @Test
+    void searchIgnoresCaseOfAccentedLetters() {
+        data.link(domain, "ete", "https://exemple.fr/été");
+        data.link(domain, "hiver", "https://exemple.fr/hiver");
+        data.link(domain, "majuscules", "https://exemple.fr/ÉTÉ-INDIEN");
+
+        var found = linkService.search(owner, null, null, "ÉTÉ", PageRequest.of(0, 10));
+        assertThat(found.getContent()).extracting(Link::getTargetUrl)
+                .containsExactlyInAnyOrder("https://exemple.fr/été", "https://exemple.fr/ÉTÉ-INDIEN");
+        assertThat(linkService.search(owner, null, null, "été", PageRequest.of(0, 10)).getTotalElements())
+                .isEqualTo(2);
+        assertThat(linkService.search(owner, null, null, "HIVER", PageRequest.of(0, 10)).getContent())
+                .extracting(Link::getSlug).containsExactly("hiver");
+    }
+
+    @Test
+    void loadsDevicesAndNotificationSettingsOfSeveralLinksAtOnce() {
+        Link first = data.link(domain, "un", "https://example.com/1");
+        Link second = data.link(domain, "deux", "https://example.com/2");
+        Link bare = data.link(domain, "trois", "https://example.com/3");
+        Device phone = data.device(owner, "phone");
+        Device laptop = data.device(owner, "laptop");
+        data.allowDevice(first, phone);
+        data.allowDevice(first, laptop);
+        data.allowDevice(second, laptop);
+        NotificationChannel hook = data.channel(owner, "hook", ChannelType.WEBHOOK, "https://hooks.example/a");
+        LinkNotificationSettings settings = new LinkNotificationSettings(links.getReferenceById(second.getId()));
+        settings.setOnExpired(true);
+        settings.setChannels(new java.util.HashSet<>(Set.of(hook)));
+        settingsRepository.saveAndFlush(settings);
+        // Lien d'un autre propriétaire glissé dans la liste : ni ses appareils ni ses réglages ne sortent.
+        User stranger = data.admin("stranger");
+        Link foreign = data.link(data.domain("foreign.example.com", stranger), "autre", "https://example.com/x");
+        data.allowDevice(foreign, data.device(stranger, "foreign"));
+        LinkNotificationSettings foreignSettings = new LinkNotificationSettings(links.getReferenceById(foreign.getId()));
+        foreignSettings.setOnExpired(true);
+        settingsRepository.saveAndFlush(foreignSettings);
+        List<UUID> ids = List.of(first.getId(), second.getId(), bare.getId(), foreign.getId());
+
+        var devicesByLink = linkService.deviceIds(owner, ids);
+        assertThat(devicesByLink.get(first.getId())).containsExactlyInAnyOrder(phone.getId(), laptop.getId());
+        assertThat(devicesByLink.get(second.getId())).containsExactly(laptop.getId());
+        assertThat(devicesByLink).doesNotContainKeys(bare.getId(), foreign.getId());
+
+        var settingsByLink = linkNotifications.settingsFor(owner, ids);
+        assertThat(settingsByLink).containsOnlyKeys(second.getId());
+        assertThat(settingsByLink.get(second.getId()).isOnExpired()).isTrue();
+        assertThat(settingsByLink.get(second.getId()).getChannels()).extracting(NotificationChannel::getId)
+                .containsExactly(hook.getId());
+    }
+
+    @Test
+    void countsDomainsOfEachDeviceInOneQuery() {
+        Domain other = data.domain("other.example.com", owner);
+        Device phone = data.device(owner, "phone");
+        Device laptop = data.device(owner, "laptop");
+        data.credential(phone, domain);
+        data.credential(phone, other);
+        User stranger = data.admin("stranger");
+        data.credential(data.device(stranger, "foreign"), data.domain("foreign.example.com", stranger));
+
+        assertThat(deviceService.list(owner)).extracting(r -> r.device().getName(), DeviceRow::domainCount)
+                .containsExactly(org.assertj.core.groups.Tuple.tuple("laptop", 0L),
+                        org.assertj.core.groups.Tuple.tuple("phone", 2L));
     }
 }

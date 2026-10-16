@@ -49,4 +49,14 @@ class TagNamesTest {
         assertThatThrownBy(() -> TagNames.normalizeColor("red")).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> TagNames.normalizeColor("#abc")).isInstanceOf(IllegalArgumentException.class);
     }
+
+    @Test
+    void textColorIsBlackOnLightAndWhiteOnDarkBackgrounds() {
+        assertThat(TagNames.textColor("#ffff00")).isEqualTo("#000");
+        assertThat(TagNames.textColor("#ffffff")).isEqualTo("#000");
+        assertThat(TagNames.textColor("#000000")).isEqualTo("#fff");
+        assertThat(TagNames.textColor("#2563eb")).isEqualTo("#fff");
+        assertThat(TagNames.textColor("#A7F3D0")).isEqualTo("#000");
+        assertThat(TagNames.textColor(null)).isEqualTo("#fff");
+    }
 }

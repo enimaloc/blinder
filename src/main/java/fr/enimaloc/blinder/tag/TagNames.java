@@ -66,4 +66,19 @@ public final class TagNames {
         }
         return color.toLowerCase(Locale.ROOT);
     }
+
+    /** Couleur de texte ({@code #000} ou {@code #fff}) la plus lisible sur le fond {@code #rrggbb} donné ; blanc sans couleur. */
+    public static String textColor(String background) {
+        if (background == null || !COLOR.matcher(background).matches()) {
+            return "#fff";
+        }
+        double luminance = 0.2126 * linear(background, 1) + 0.7152 * linear(background, 3) + 0.0722 * linear(background, 5);
+        // Seuil où le contraste du noir égale celui du blanc : (L + 0.05) / 0.05 = 1.05 / (L + 0.05).
+        return luminance > 0.179 ? "#000" : "#fff";
+    }
+
+    private static double linear(String hex, int from) {
+        double channel = Integer.parseInt(hex.substring(from, from + 2), 16) / 255.0;
+        return channel <= 0.03928 ? channel / 12.92 : Math.pow((channel + 0.055) / 1.055, 2.4);
+    }
 }

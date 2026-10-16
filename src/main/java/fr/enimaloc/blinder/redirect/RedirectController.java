@@ -14,6 +14,7 @@ import fr.enimaloc.blinder.link.Link;
 import fr.enimaloc.blinder.link.LinkRepository;
 import fr.enimaloc.blinder.link.SlugPolicy;
 import fr.enimaloc.blinder.link.UsageCounter;
+import fr.enimaloc.blinder.security.RetryAfter;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
@@ -195,8 +196,7 @@ public class RedirectController {
     }
 
     private static ModelAndView tooManyAttempts(HttpServletResponse response, Duration retryAfter) {
-        long seconds = Math.max(1, (retryAfter.toMillis() + 999) / 1000);
-        response.setHeader(HttpHeaders.RETRY_AFTER, String.valueOf(seconds));
+        RetryAfter.set(response, retryAfter);
         ModelAndView mv = new ModelAndView("public/too-many-attempts");
         mv.setStatus(HttpStatus.TOO_MANY_REQUESTS);
         return mv;

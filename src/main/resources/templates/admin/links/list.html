@@ -32,8 +32,8 @@
             <td th:text="${row.link.targetUrl}"></td>
             <td>
                 <a th:each="t : ${row.tags}" class="tag" th:text="${t.name}"
-                   th:style="${t.color} != null ? '--tag-color: ' + ${t.color}"
-                   th:href="@{/_/(tag=${t.id},domain=${selectedDomain})}"></a>
+                   th:style="${t.color} != null ? '--tag-color: ' + ${t.color} + '; --tag-text: ' + ${t.textColor()}"
+                   th:href="${selectedDomain != null} ? @{/_/(tag=${t.id},domain=${selectedDomain})} : @{/_/(tag=${t.id})}"></a>
             </td>
             <td><span th:class="'badge badge-' + ${#strings.toLowerCase(row.status.name())}"
                       th:text="${row.status.label()}"></span></td>

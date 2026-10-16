@@ -1,6 +1,7 @@
 package fr.enimaloc.blinder.link.preview;
 
 import org.apache.hc.client5.http.DnsResolver;
+import org.apache.hc.client5.http.SystemDefaultDnsResolver;
 import org.apache.hc.client5.http.classic.methods.HttpGet;
 import org.apache.hc.client5.http.config.ConnectionConfig;
 import org.apache.hc.client5.http.config.RequestConfig;
@@ -45,8 +46,12 @@ public class PreviewFetcher implements AutoCloseable {
     });
 
     public PreviewFetcher(AddressPolicy policy) {
+        this(policy, SystemDefaultDnsResolver.INSTANCE);
+    }
+
+    PreviewFetcher(AddressPolicy policy, DnsResolver system) {
         watchdog.setRemoveOnCancelPolicy(true);
-        DnsResolver resolver = new FilteringDnsResolver(policy);
+        DnsResolver resolver = new FilteringDnsResolver(policy, system, TIMEOUT.toDuration());
         PoolingHttpClientConnectionManager manager = PoolingHttpClientConnectionManagerBuilder.create()
                 .setDnsResolver(resolver)
                 .setDefaultConnectionConfig(ConnectionConfig.custom()

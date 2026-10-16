@@ -71,9 +71,10 @@ public class LinkApiController {
         if (size < 1) {
             throw new FieldErrorException("size", "Doit être au moins 1");
         }
-        var result = links.search(currentUser.require(), domainId, tagId, q,
-                PageRequest.of(page, Math.min(size, MAX_SIZE)));
-        return PageResource.of(result, link -> resource(link, request));
+        User owner = currentUser.require();
+        var result = links.search(owner, domainId, tagId, q, PageRequest.of(page, Math.min(size, MAX_SIZE)));
+        return PageResource.of(result,
+                content -> mapper.toResources(owner, content, link -> PublicLinkUrls.of(request, link)));
     }
 
     @GetMapping("/{id}")
@@ -86,7 +87,7 @@ public class LinkApiController {
         User owner = currentUser.require();
         rejectUnknown(input);
         LinkForm form = mapper.toForm(input, new LinkForm());
-        Link created = apiFields(() -> edits.create(owner, form));
+        Link created = apiFields(owner, form, null, () -> edits.create(owner, form));
         edits.refreshPreviewAfterSave(owner, created, null);
         return ResponseEntity.created(URI.create(BASE + "/" + created.getId()))
                 .body(resource(links.get(owner, created.getId()), request));
@@ -138,8 +139,8 @@ public class LinkApiController {
         return image(qr.png(PublicLinkUrls.of(request, link), QrCodes.clampSize(size)), MediaType.IMAGE_PNG);
     }
 
-    /** Course entre deux créations du même slug : la contrainte d'unicité tranche. */
-    @ExceptionHandler(DataIntegrityViolationException.class)
+    /** Course entre deux créations du même slug : la contrainte d'unicité tranche (revérifiée dans {@link #apiFields}). */
+    @ExceptionHandler(SlugTakenException.class)
     ProblemDetail duplicateSlug() {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ApiProblems.CONFLICT);
         problem.setProperty("errors", Map.of("slug", DUPLICATE_SLUG));
@@ -151,7 +152,7 @@ public class LinkApiController {
         String previousTarget = current.getTargetUrl();
         rejectUnknown(input);
         LinkForm form = mapper.toForm(input, new LinkForm());
-        Link updated = apiFields(() -> edits.update(owner, current.getId(), form));
+        Link updated = apiFields(owner, form, current.getId(), () -> edits.update(owner, current.getId(), form));
         edits.refreshPreviewAfterSave(owner, updated, previousTarget);
         return resource(links.get(owner, current.getId()), request);
     }
@@ -167,11 +168,26 @@ public class LinkApiController {
         return mapper.toResource(link, PublicLinkUrls.of(request, link));
     }
 
-    private static Link apiFields(Supplier<Link> action) {
+    /**
+     * Une violation d'intégrité n'est un « slug pris » que si le slug demandé l'est effectivement ; sinon elle reste
+     * une violation générique (409 sans champ, via {@link ApiProblems}).
+     */
+    private Link apiFields(User owner, LinkForm form, UUID currentId, Supplier<Link> action) {
         try {
             return action.get();
         } catch (FieldErrorException e) {
             throw LinkApiMapper.toApi(e);
+        } catch (DataIntegrityViolationException e) {
+            if (links.slugTaken(owner, form.getDomainId(), form.getSlug(), currentId)) {
+                throw new SlugTakenException(e);
+            }
+            throw e;
+        }
+    }
+
+    private static final class SlugTakenException extends RuntimeException {
+        SlugTakenException(Throwable cause) {
+            super(cause);
         }
     }
 

@@ -7,6 +7,14 @@ import tools.jackson.databind.JsonNode;
 /** Corps de création d'un tag ; la mise à jour partielle suit {@link #merge}. */
 public record TagInput(String name, String color) {
 
+    /** Corps d'une création : {@code name} et {@code color} absents ou nuls sont laissés au service ("Nom requis"). */
+    static TagInput parse(JsonNode body) {
+        if (!body.isObject()) {
+            throw new FieldErrorException("body", "Objet JSON attendu");
+        }
+        return new TagInput(text(body.get("name"), "name"), text(body.get("color"), "color"));
+    }
+
     /**
      * Fusion d'un PATCH : un champ absent garde la valeur courante, {@code color} nul ou vide retire la couleur,
      * {@code name} nul est refusé par le service ("Nom requis").
@@ -27,7 +35,7 @@ public record TagInput(String name, String color) {
     }
 
     private static String text(JsonNode node, String field) {
-        if (node.isNull()) {
+        if (node == null || node.isNull()) {
             return null;
         }
         if (!node.isString()) {

@@ -2,6 +2,8 @@ package fr.enimaloc.blinder.notification;
 
 import fr.enimaloc.blinder.link.preview.FilteringDnsResolver;
 import fr.enimaloc.blinder.link.preview.PublicAddressPolicy;
+import org.apache.hc.client5.http.DnsResolver;
+import org.apache.hc.client5.http.SystemDefaultDnsResolver;
 import org.apache.hc.client5.http.classic.methods.HttpPost;
 import org.apache.hc.client5.http.config.ConnectionConfig;
 import org.apache.hc.client5.http.config.RequestConfig;
@@ -13,6 +15,7 @@ import org.apache.hc.core5.http.ClassicHttpResponse;
 import org.apache.hc.core5.http.ContentType;
 import org.apache.hc.core5.http.io.entity.StringEntity;
 import org.apache.hc.core5.util.Timeout;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
@@ -20,18 +23,22 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
+import java.time.Duration;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
 /**
  * Webhook signé (HMAC-SHA256). Deux clients : l'un au résolveur DNS filtrant, l'autre sans filtre pour les canaux
- * {@code allowPrivateNetwork}. Pas de redirection suivie, 5 s au total, corps de réponse ignoré.
+ * {@code allowPrivateNetwork}. Pas de redirection suivie, 5 s au total (plus 5 s au plus de résolution DNS),
+ * corps de réponse ignoré.
  */
 @Component
 public class WebhookSender implements ChannelSender, AutoCloseable {
 
     static final Timeout TIMEOUT = Timeout.ofSeconds(5);
+    /** La résolution DNS n'est couverte par aucun délai du client HTTP : elle a le sien. */
+    static final Duration DNS_TIMEOUT = Duration.ofSeconds(5);
     static final String USER_AGENT = "BlinderWebhook/1.0";
     static final String INVALID_TARGET = "Cible invalide";
 
@@ -44,12 +51,19 @@ public class WebhookSender implements ChannelSender, AutoCloseable {
         return thread;
     });
 
+    @Autowired
     public WebhookSender(Clock clock) {
+        this(clock, SystemDefaultDnsResolver.INSTANCE, DNS_TIMEOUT);
+    }
+
+    /** Les deux clients bornent la résolution DNS ; seul le premier filtre les adresses. */
+    WebhookSender(Clock clock, DnsResolver system, Duration dnsTimeout) {
         this.clock = clock;
         watchdog.setRemoveOnCancelPolicy(true);
         this.filtering = client(PoolingHttpClientConnectionManagerBuilder.create()
-                .setDnsResolver(new FilteringDnsResolver(new PublicAddressPolicy())));
-        this.unfiltered = client(PoolingHttpClientConnectionManagerBuilder.create());
+                .setDnsResolver(new FilteringDnsResolver(new PublicAddressPolicy(), system, dnsTimeout)));
+        this.unfiltered = client(PoolingHttpClientConnectionManagerBuilder.create()
+                .setDnsResolver(new FilteringDnsResolver(address -> true, system, dnsTimeout)));
     }
 
     private static CloseableHttpClient client(PoolingHttpClientConnectionManagerBuilder managerBuilder) {

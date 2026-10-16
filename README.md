@@ -57,7 +57,11 @@ Chaque visite d'un lien (redirigée, refusée, défi, aperçu) est consignée de
 asynchrone : le chemin de redirection n'attend jamais la base. Les visites passent
 par une file mémoire (`blinder.stats.queue-capacity`) vidée par un thread d'écriture
 au plus toutes les `blinder.stats.flush-interval`. Si la file est pleine, la visite
-est abandonnée et le compteur « visites perdues » du tableau de bord augmente.
+est abandonnée et le compteur « visites perdues » du tableau de bord augmente. Un lot
+refusé par une contrainte d'intégrité (par exemple un lien supprimé pendant le lot) est
+réécrit visite par visite : seules les visites réellement perdues sont comptées, les
+visites d'un lien supprimé disparaissant avec lui. Toute autre erreur (base
+indisponible…) abandonne le lot entier, compté comme perdu, sans nouvel essai.
 
 - Tableau de bord global : `/_/stats` ; par lien : `/_/links/{id}/stats` (période
   7, 30, 90 ou 365 jours).
@@ -127,9 +131,14 @@ redirection suivie, délai de 5 s). En-têtes :
 
 Livraison au moins une fois : dédupliquer sur `X-Blinder-Delivery`.
 
-Limites connues : le temps de résolution DNS n'est pas couvert par le délai de 5 s ;
-des visites peuvent être perdues si la file déborde (compteur affiché dans les
-statistiques) ; un lien supprimé en cours de lot fait perdre les visites de ce lot.
+La résolution DNS a son propre délai de 5 s (en plus du délai de la requête) ; au-delà,
+l'essai échoue et est retenté comme tout autre échec. L'aperçu des liens borne de même
+sa résolution DNS à son délai de 3 s. Webhooks et aperçus partagent 16 résolutions DNS
+simultanées au plus : au-delà, l'essai échoue aussitôt (avertissement dans les journaux,
+au plus une fois par minute).
+
+Limite connue : des visites peuvent être perdues si la file déborde (compteur affiché
+dans les statistiques).
 
 Vérification en shell (`BODY` = corps brut reçu) :
 
@@ -181,7 +190,7 @@ Tout autre changement (cible, tags, métadonnées, protections…) ne réarme ri
 | `blinder.geoip.database` | vide | Chemin de la base GeoLite2 `.mmdb` |
 | `blinder.notifications.mail-from` | `blinder@localhost` | Expéditeur des e-mails |
 | `blinder.notifications.denials.threshold` | `10` | Refus déclenchant l'alerte |
-| `blinder.notifications.denials.window` | `10m` | Fenêtre glissante de comptage des refus |
+| `blinder.notifications.denials.window` | `10m` | Fenêtre glissante de comptage des refus (en mémoire ; un lien sans refus récent est oublié) |
 | `blinder.notifications.denials.cooldown` | `1h` | Silence après une alerte de refus |
 | `blinder.scheduling.enabled` | `true` | Active les tâches planifiées (purge, envois, expiration) |
 | `spring.mail.*` | vide | Serveur SMTP |
@@ -260,12 +269,28 @@ Les erreurs sont des `application/problem+json` (RFC 9457) :
   lue sont ignorés).
 - 401 / 429 : voir ci-dessus.
 - 404 : identifiant inconnu ou appartenant à un autre propriétaire **dans le chemin ou
-  la requête** (`/links/{id}`, `?tag=`, `?domain=`, `?link=`...).
+  la requête** (`/links/{id}`, `?tag=`, `?domain=`, `?link=`...), ou route inconnue.
+  Un paramètre de requête illisible (`?link=abc`, `?days=x`) donne un 400.
+- 405 : méthode non permise sur la route (en-tête `Allow`).
 - 409 : `version` fournie différente de la version courante, modification concurrente,
-  ou course entre deux créations du même slug.
+  ou course entre deux créations du même slug (`errors.slug` seulement si le slug est
+  effectivement pris ; sinon un 409 sans champ, par exemple deux créations simultanées
+  du même tag).
+- 500 : erreur inattendue, sans détail interne dans le corps.
+
+Sous `/_/api/`, toute erreur est un `application/problem+json`, y compris celles du
+conteneur redirigées vers `/error`.
 
 Les dates sont en ISO-8601 avec décalage (`2026-10-16T14:30:00+02:00`), dans le fuseau
-de l'administrateur.
+de l'administrateur. Une date envoyée est enregistrée à l'instant exact, y compris dans
+l'heure répétée du passage à l'heure d'hiver (`02:30+02:00` et `02:30+01:00` restent
+distincts).
+
+Dans le panel, les dates sont saisies à la minute, en heure locale du fuseau de
+l'administrateur. Une date laissée telle quelle est conservée à l'identique (secondes et
+décalage compris) et ne réarme pas l'alerte « expiré ». Limite connue : une nouvelle date
+saisie dans l'heure répétée (ex. 02:30 le dernier dimanche d'octobre à Paris) prend le
+premier décalage (heure d'été) ; passer par l'API pour viser la seconde occurrence.
 
 ### Domaines
 
@@ -356,7 +381,8 @@ curl -X PATCH -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/js
   -d '{"targetUrl":"https://example.com/v2"}' "$BLINDER/links/$LINK_ID"
 ```
 
-Si `version` est fourni et diffère de la version courante : 409. Seul un
+Si `version` est fourni et diffère de la version courante : 409. Toute modification
+du lien, de ses tags ou de ses réglages de notification change la version. Seul un
 changement qui les concerne réarme les alertes (voir « Notifications »).
 
 - `DELETE /links/{id}` : 204, supprime le lien et ses visites.

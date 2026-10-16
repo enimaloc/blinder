@@ -10,6 +10,10 @@ import org.hibernate.internal.util.JdbcExceptionHelper;
  * (hence Spring's {@code DataIntegrityViolationException}), like the other databases.
  * sqlite-jdbc returns extended result codes (e.g. 2067) whose low byte is SQLITE_CONSTRAINT (19),
  * which the stock community dialect does not translate.
+ *
+ * <p>{@code lower()} stays {@code lower()}: on every pooled connection it is replaced by a Unicode-aware Java function
+ * ({@link SqliteFunctionsPostProcessor}), since SQLite's built-in one only folds ASCII letters. A connection without
+ * that registration falls back to the built-in function (ASCII only) instead of failing.
  */
 public class BlinderSqliteDialect extends SQLiteDialect {
 

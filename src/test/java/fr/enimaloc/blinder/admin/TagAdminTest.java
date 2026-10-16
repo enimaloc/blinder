@@ -240,4 +240,47 @@ class TagAdminTest {
         mvc.perform(get("/_/tags").with(asAdmin)).andExpect(content().string(containsString("href=\"/_/tags\"")));
         mvc.perform(get("/_/tags")).andExpect(status().is3xxRedirection());
     }
+
+    @Test
+    void pillsCarryTheirColourAndAReadableTextColour() throws Exception {
+        Tag light = data.tag(admin, "clair");
+        light.setColor("#ffff00");
+        tags.save(light);
+        Tag dark = data.tag(admin, "sombre");
+        dark.setColor("#112233");
+        tags.save(dark);
+        Link link = data.link(domain, "pil", "https://example.com");
+        data.tagLink(link, light);
+        data.tagLink(link, dark);
+        mvc.perform(get("/_/").with(asAdmin))
+                .andExpect(content().string(containsString("--tag-color: #ffff00; --tag-text: #000")))
+                .andExpect(content().string(containsString("--tag-color: #112233; --tag-text: #fff")));
+        mvc.perform(get("/_/tags").with(asAdmin))
+                .andExpect(content().string(containsString("--tag-color: #ffff00; --tag-text: #000")));
+    }
+
+    @Test
+    void pillFilterLinksOmitTheDomainParameterWhenNoDomainIsSelected() throws Exception {
+        Tag promo = data.tag(admin, "promo");
+        data.tagLink(data.link(domain, "pf", "https://example.com"), promo);
+        mvc.perform(get("/_/").with(asAdmin))
+                .andExpect(content().string(containsString("href=\"/_/?tag=" + promo.getId() + "\"")))
+                .andExpect(content().string(not(containsString("domain="))));
+        mvc.perform(get("/_/").param("domain", domain.getId().toString()).with(asAdmin))
+                .andExpect(content().string(containsString("tag=" + promo.getId() + "&amp;domain=" + domain.getId())));
+    }
+
+    @Test
+    void overlongTagNamesAreReportedAsTooLongNotInvalid() throws Exception {
+        for (int length : new int[]{41, 300}) {
+            mvc.perform(post("/_/tags").with(asAdmin).with(csrf()).param("name", "a".repeat(length)).param("noColor", "true"))
+                    .andExpect(status().isOk())
+                    .andExpect(content().string(containsString("40 caractères maximum")))
+                    .andExpect(content().string(not(containsString("Valeur invalide"))));
+        }
+        Tag t = data.tag(admin, "ok");
+        mvc.perform(post("/_/tags/{id}", t.getId()).with(asAdmin).with(csrf()).param("name", "a".repeat(300)).param("noColor", "true"))
+                .andExpect(content().string(containsString("40 caractères maximum")));
+        assertThat(tags.findAll()).hasSize(1);
+    }
 }

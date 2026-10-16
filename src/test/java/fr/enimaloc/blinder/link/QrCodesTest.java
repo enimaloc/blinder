@@ -35,6 +35,13 @@ class QrCodesTest {
     }
 
     @Test
+    void smallestPngIsExactly128Pixels() throws IOException {
+        BufferedImage image = ImageIO.read(new ByteArrayInputStream(qr.png("http://go.example.com/promo", 128)));
+        assertThat(image.getWidth()).isEqualTo(128);
+        assertThat(image.getHeight()).isEqualTo(128);
+    }
+
+    @Test
     void sizeIsClamped() {
         assertThat(QrCodes.clampSize(10)).isEqualTo(128);
         assertThat(QrCodes.clampSize(5000)).isEqualTo(2048);

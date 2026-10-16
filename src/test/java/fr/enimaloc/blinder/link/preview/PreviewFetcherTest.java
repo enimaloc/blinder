@@ -2,6 +2,7 @@ package fr.enimaloc.blinder.link.preview;
 
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
+import fr.enimaloc.blinder.support.SlowDnsResolver;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -121,6 +122,19 @@ class PreviewFetcherTest {
         exchange.getResponseHeaders().set("Location", location);
         exchange.sendResponseHeaders(302, -1);
         exchange.close();
+    }
+
+    @Test
+    void slowDnsResolutionIsBoundedByThePreviewTimeout() {
+        // Le résolveur simulé répond au bout de 6 s : au-delà du délai de l'aperçu (3 s).
+        PreviewFetcher slowDns = new PreviewFetcher(address -> true, new SlowDnsResolver(Duration.ofSeconds(6)));
+        try {
+            long start = System.nanoTime();
+            assertThat(slowDns.fetch("http://slow.test:" + port + "/page")).isEmpty();
+            assertThat(Duration.ofNanos(System.nanoTime() - start)).isLessThan(Duration.ofMillis(4_500));
+        } finally {
+            slowDns.close();
+        }
     }
 
     @Test

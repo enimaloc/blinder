@@ -47,4 +47,9 @@ public class Tag extends BaseEntity {
         this.name = name;
         this.nameKey = name.toLowerCase(Locale.ROOT);
     }
+
+    /** Couleur de texte lisible sur {@link #color} (pour les gabarits). */
+    public String textColor() {
+        return TagNames.textColor(color);
+    }
 }

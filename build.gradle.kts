@@ -35,6 +35,7 @@ dependencies {
     runtimeOnly("com.h2database:h2")
     runtimeOnly("org.postgresql:postgresql")
     runtimeOnly("org.xerial:sqlite-jdbc")
+    compileOnly("org.xerial:sqlite-jdbc")
     runtimeOnly("org.hibernate.orm:hibernate-community-dialects")
     compileOnly("org.hibernate.orm:hibernate-community-dialects")
     compileOnly("org.projectlombok:lombok")

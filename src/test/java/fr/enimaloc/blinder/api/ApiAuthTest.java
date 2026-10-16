@@ -143,8 +143,10 @@ class ApiAuthTest {
 
     @Test
     void postWithTokenNeedsNoCsrf() throws Exception {
-        MvcResult result = mvc.perform(bearer(from(post(DOMAINS), "10.9.0.8"), token)).andReturn();
-        assertThat(result.getResponse().getStatus()).isNotIn(401, 403);
+        // Sans CSRF : on atteint le routage (POST non mappé sur /domains) au lieu d'un 403 de la protection CSRF.
+        mvc.perform(bearer(from(post(DOMAINS), "10.9.0.8"), token))
+                .andExpect(status().isMethodNotAllowed())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON));
     }
 
     @Test
@@ -164,7 +166,10 @@ class ApiAuthTest {
         mvc.perform(bearer(from(get(DOMAINS), ip), "bl_" + DeviceTokens.newToken()))
                 .andExpect(status().isTooManyRequests())
                 .andExpect(header().exists(HttpHeaders.RETRY_AFTER))
-                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON));
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.status").value(429))
+                .andExpect(jsonPath("$.title").value("Too Many Requests"))
+                .andExpect(jsonPath("$.detail").value("Trop de jetons refusés depuis cette adresse, réessayez plus tard"));
         mvc.perform(bearer(from(get(DOMAINS), ip), token))
                 .andExpect(status().isTooManyRequests())
                 .andExpect(header().exists(HttpHeaders.RETRY_AFTER));

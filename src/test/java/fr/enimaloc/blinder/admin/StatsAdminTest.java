@@ -170,6 +170,37 @@ class StatsAdminTest {
     }
 
     @Test
+    void tagCsvFileNameIsTransliteratedAndCarriesTheUtf8Name() throws Exception {
+        fr.enimaloc.blinder.tag.Tag ete = data.tag(admin, "Été 2026");
+        String header = mvc.perform(get("/_/stats.csv").param("tag", ete.getId().toString()).with(login(admin)))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getHeader("Content-Disposition");
+        assertThat(header).matches("attachment; filename=\"blinder-stats-tag-Ete_2026-\\d{4}-\\d{2}-\\d{2}\\.csv\";"
+                + " filename\\*=UTF-8''blinder-stats-tag-%C3%89t%C3%A9%202026-\\d{4}-\\d{2}-\\d{2}\\.csv");
+    }
+
+    @Test
+    void webjarsAreNotServedPubliclyButTheAdminVendorPathIs() throws Exception {
+        String asset = "chart.js/" + chartJsVersion() + "/dist/chart.umd.js";
+        mvc.perform(get("/webjars/" + asset)).andExpect(status().isNotFound());
+        mvc.perform(get("/webjars/" + asset).with(login(admin))).andExpect(status().isNotFound());
+        mvc.perform(get("/_/vendor/" + asset)).andExpect(status().is3xxRedirection())
+                .andExpect(header().string("Location", containsString("/_/login")));
+        mvc.perform(get("/_/vendor/" + asset).with(login(admin))).andExpect(status().isOk());
+    }
+
+    /** Version du webjar Chart.js lue sur le classpath, pour ne pas la recopier ici. */
+    private static String chartJsVersion() throws java.io.IOException {
+        try (java.io.InputStream in = StatsAdminTest.class.getResourceAsStream(
+                "/META-INF/maven/org.webjars.npm/chart.js/pom.properties")) {
+            assertThat(in).as("webjar Chart.js absent du classpath").isNotNull();
+            java.util.Properties properties = new java.util.Properties();
+            properties.load(in);
+            return properties.getProperty("version");
+        }
+    }
+
+    @Test
     void foreignOrUnknownTagIs404() throws Exception {
         fr.enimaloc.blinder.tag.Tag theirs = data.tag(data.admin("other"), "promo");
         mvc.perform(get("/_/stats").param("tag", theirs.getId().toString()).with(login(admin)))

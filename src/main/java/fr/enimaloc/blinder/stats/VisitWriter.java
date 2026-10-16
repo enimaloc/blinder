@@ -6,6 +6,7 @@ import fr.enimaloc.blinder.link.LinkRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.SmartLifecycle;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -123,18 +124,19 @@ public class VisitWriter implements SmartLifecycle {
         if (batch.isEmpty()) {
             return;
         }
-        List<Visit> persisted;
-        try {
-            List<Enriched> enriched = new ArrayList<>(batch.size());
-            for (VisitRecord record : batch) {
+        List<Enriched> enriched = new ArrayList<>(batch.size());
+        for (VisitRecord record : batch) {
+            try {
                 enriched.add(enrich(record));
+            } catch (Throwable t) {
+                log.error("Enrichissement d'une visite du lien {} impossible, visite abandonnée", record.linkId(), t);
+                dropped.incrementAndGet();
             }
-            persisted = transactions.execute(status -> persist(enriched));
-        } catch (Throwable t) {
-            log.error("Écriture d'un lot de {} visites impossible, lot abandonné", batch.size(), t);
-            dropped.addAndGet(batch.size());
+        }
+        if (enriched.isEmpty()) {
             return;
         }
+        List<Visit> persisted = persistBatch(enriched);
         if (persisted == null || persisted.isEmpty()) {
             return;
         }
@@ -149,6 +151,63 @@ public class VisitWriter implements SmartLifecycle {
         } catch (Throwable t) {
             log.error("Écouteurs de visites inaccessibles", t);
         }
+    }
+
+    private List<Visit> persistBatch(List<Enriched> enriched) {
+        try {
+            return transactions.execute(status -> persist(enriched));
+        } catch (Throwable t) {
+            if (isIntegrityViolation(t)) {
+                // Typiquement un lien supprimé entre sa lecture et la validation : on isole la ou les visites fautives.
+                log.warn("Écriture d'un lot de {} visites refusée par une contrainte d'intégrité, nouvel essai visite"
+                        + " par visite", enriched.size());
+                log.debug("Détail de l'échec du lot", t);
+                return writeOneByOne(enriched);
+            }
+            // Base indisponible, transaction impossible… : réessayer visite par visite multiplierait l'attente
+            // (délai d'obtention d'une connexion pour chaque visite) et bloquerait l'arrêt. Le lot est abandonné.
+            log.error("Écriture d'un lot de {} visites impossible, lot abandonné", enriched.size(), t);
+            dropped.addAndGet(enriched.size());
+            return List.of();
+        }
+    }
+
+    private static boolean isIntegrityViolation(Throwable t) {
+        for (Throwable c = t; c != null; c = c.getCause() == c ? null : c.getCause()) {
+            if (c instanceof DataIntegrityViolationException
+                    || c instanceof org.hibernate.exception.ConstraintViolationException) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Une transaction par visite : le lien est relu, donc une visite d'un lien supprimé entre-temps est ignorée
+     * (comme à l'ordinaire) ; seules les visites dont l'écriture échoue encore sont comptées comme perdues. Chaque
+     * échec individuel n'est journalisé qu'en DEBUG, suivi d'une ligne de synthèse pour le lot.
+     */
+    private List<Visit> writeOneByOne(List<Enriched> enriched) {
+        List<Visit> written = new ArrayList<>(enriched.size());
+        int lost = 0;
+        for (Enriched e : enriched) {
+            try {
+                List<Visit> one = transactions.execute(status -> persist(List.of(e)));
+                if (one != null) {
+                    written.addAll(one);
+                }
+            } catch (Throwable t) {
+                log.debug("Écriture d'une visite du lien {} impossible, visite abandonnée", e.record().linkId(), t);
+                lost++;
+            }
+        }
+        dropped.addAndGet(lost);
+        if (lost > 0) {
+            log.error("Nouvel essai visite par visite : {} visite(s) perdue(s) sur {}", lost, enriched.size());
+        } else {
+            log.warn("Nouvel essai visite par visite : aucune visite perdue sur {}", enriched.size());
+        }
+        return written;
     }
 
     private record Enriched(VisitRecord record, UserAgentClassifier.Result agent, String refererHost,

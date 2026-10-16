@@ -161,4 +161,19 @@ class StatsQueryTest {
         assertThat(csv.toString().split("\r\n")).hasSize(3);
         assertThat(query.totals(admin, StatsScope.tag(java.util.UUID.randomUUID()), StatsPeriod.D30).total()).isZero();
     }
+
+    @Test
+    void tagScopeIgnoresLinksOfAnotherOwner() {
+        fr.enimaloc.blinder.user.User other = data.admin("other");
+        Link foreign = data.link(data.domain("other.example.com", other), "fg", "https://example.com");
+        fr.enimaloc.blinder.tag.Tag promo = data.tag(admin, "promo");
+        data.tagLink(foreign, promo);
+        LocalDate today = LocalDate.now(clock.withZone(blinder.admin().timeZone()));
+        // Cumul incohérent (propriétaire du lien différent) : la portée par tag ne doit pas le compter.
+        VisitDailyStat stray = new VisitDailyStat(foreign, admin, today, VisitOutcome.REDIRECTED);
+        stray.increment(4);
+        dailyStats.save(stray);
+
+        assertThat(query.daily(admin, StatsScope.tag(promo.getId()), StatsPeriod.D7).getLast().redirected()).isZero();
+    }
 }

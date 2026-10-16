@@ -7,15 +7,16 @@ import fr.enimaloc.blinder.link.Link;
 import fr.enimaloc.blinder.link.LinkForm;
 import fr.enimaloc.blinder.link.LinkService;
 import fr.enimaloc.blinder.notification.LinkNotificationService;
+import fr.enimaloc.blinder.notification.LinkNotificationSettings;
 import fr.enimaloc.blinder.notification.NotificationChannel;
 import fr.enimaloc.blinder.tag.Tag;
+import fr.enimaloc.blinder.user.User;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Path;
 import jakarta.validation.Validator;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
-import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.util.Arrays;
@@ -25,7 +26,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.TreeMap;
+import java.util.UUID;
 import java.util.function.Consumer;
+import java.util.function.Function;
 
 /**
  * Conversions entre l'API et le formulaire du panel ({@link LinkForm}), pour que l'API passe par les mêmes règles.
@@ -76,11 +79,30 @@ public class LinkApiMapper {
      * {@code link.domain} et {@code link.tags} doivent être chargés.
      */
     public LinkResource toResource(Link link, String url) {
-        LinkResource.Notifications notify = notifications.settingsFor(link.getId())
-                .map(s -> new LinkResource.Notifications(s.isOnExhausted(), s.isOnExpired(), s.isOnDenials(),
-                        s.isOnEachVisit(), s.getVisitThreshold(),
-                        s.getChannels().stream().map(NotificationChannel::getId).sorted().toList()))
-                .orElse(LinkResource.Notifications.NONE);
+        return toResource(link, url, notifications.settingsFor(link.getId()).orElse(null),
+                links.deviceIds(link.getId()));
+    }
+
+    /**
+     * Représentations d'une page de liens : réglages de notification et appareils chargés en une requête chacun,
+     * quel que soit le nombre de liens. {@code link.domain} et {@code link.tags} doivent être chargés.
+     *
+     * @param owner propriétaire des liens (les données d'un autre propriétaire sont ignorées)
+     * @param url   URL publique de chaque lien
+     */
+    public List<LinkResource> toResources(User owner, List<Link> page, Function<Link, String> url) {
+        List<UUID> ids = page.stream().map(Link::getId).toList();
+        Map<UUID, LinkNotificationSettings> settings = notifications.settingsFor(owner, ids);
+        Map<UUID, List<UUID>> devices = links.deviceIds(owner, ids);
+        return page.stream().map(link -> toResource(link, url.apply(link), settings.get(link.getId()),
+                devices.getOrDefault(link.getId(), List.of()))).toList();
+    }
+
+    private LinkResource toResource(Link link, String url, LinkNotificationSettings settings, List<UUID> deviceIds) {
+        LinkResource.Notifications notify = settings == null ? LinkResource.Notifications.NONE
+                : new LinkResource.Notifications(settings.isOnExhausted(), settings.isOnExpired(),
+                        settings.isOnDenials(), settings.isOnEachVisit(), settings.getVisitThreshold(),
+                        settings.getChannels().stream().map(NotificationChannel::getId).sorted().toList());
         return new LinkResource(
                 link.getId(),
                 link.getDomain().getId(),
@@ -99,7 +121,7 @@ public class LinkApiMapper {
                 link.getIpAllowlist() == null ? List.of()
                         : Arrays.stream(link.getIpAllowlist().split(",")).filter(s -> !s.isBlank()).toList(),
                 link.isDeviceProtected(),
-                links.deviceIds(link.getId()).stream().sorted().toList(),
+                deviceIds.stream().sorted().toList(),
                 link.getRedirectStatus(),
                 link.isForwardQuery(),
                 link.isInterstitial(),
@@ -164,8 +186,9 @@ public class LinkApiMapper {
         set(in.getSlug(), form::setSlug);
         set(in.getTargetUrl(), form::setTargetUrl);
         set(in.getEnabled(), form::setEnabled);
-        set(toLocal(in.getNotBefore()), form::setNotBefore);
-        set(toLocal(in.getExpiresAt()), form::setExpiresAt);
+        // Instants exacts : une heure locale seule serait ambiguë dans l'heure répétée (passage à l'heure d'hiver).
+        set(in.getNotBefore(), value -> form.exactNotBefore(value.toInstant(), zone));
+        set(in.getExpiresAt(), value -> form.exactExpiresAt(value.toInstant(), zone));
         set(in.getTtlMinutes(), form::setTtlMinutes);
         set(in.getMaxUses(), form::setMaxUses);
         set(in.getDeniedUrl(), form::setDeniedUrl);
@@ -235,9 +258,5 @@ public class LinkApiMapper {
 
     private OffsetDateTime toOffset(Instant instant) {
         return instant == null ? null : instant.atZone(zone).toOffsetDateTime();
-    }
-
-    private LocalDateTime toLocal(OffsetDateTime value) {
-        return value == null ? null : value.atZoneSameInstant(zone).toLocalDateTime();
     }
 }

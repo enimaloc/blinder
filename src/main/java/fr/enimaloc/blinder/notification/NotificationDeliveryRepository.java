@@ -1,6 +1,7 @@
 package fr.enimaloc.blinder.notification;
 
 import fr.enimaloc.blinder.user.User;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -17,6 +18,7 @@ public interface NotificationDeliveryRepository extends JpaRepository<Notificati
     List<NotificationDelivery> findTop20ByStatusAndNextAttemptAtLessThanEqualOrderByNextAttemptAtAsc(
             DeliveryStatus status, Instant before);
 
+    @EntityGraph(attributePaths = "channel")
     List<NotificationDelivery> findTop100ByOwnerOrderByCreatedAtDesc(User owner);
 
     Optional<NotificationDelivery> findByIdAndOwner(UUID id, User owner);

@@ -3,6 +3,7 @@ package fr.enimaloc.blinder.api;
 import fr.enimaloc.blinder.api.token.ApiTokenService;
 import fr.enimaloc.blinder.security.RateLimitKeys;
 import fr.enimaloc.blinder.security.RateLimiter;
+import fr.enimaloc.blinder.security.RetryAfter;
 import fr.enimaloc.blinder.user.BlinderUserDetails;
 import fr.enimaloc.blinder.user.User;
 import jakarta.servlet.FilterChain;
@@ -17,6 +18,7 @@ import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.context.SecurityContextHolderStrategy;
 import org.springframework.security.web.AuthenticationEntryPoint;
+import org.springframework.security.web.context.SecurityContextRepository;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
@@ -35,12 +37,17 @@ public class ApiTokenFilter extends OncePerRequestFilter {
     private final ApiTokenService tokens;
     private final RateLimiter failures;
     private final AuthenticationEntryPoint entryPoint;
+    private final ProblemWriter problems;
+    private final SecurityContextRepository repository;
     private final SecurityContextHolderStrategy contexts = SecurityContextHolder.getContextHolderStrategy();
 
-    public ApiTokenFilter(ApiTokenService tokens, RateLimiter failures, AuthenticationEntryPoint entryPoint) {
+    public ApiTokenFilter(ApiTokenService tokens, RateLimiter failures, AuthenticationEntryPoint entryPoint,
+                          ProblemWriter problems, SecurityContextRepository repository) {
         this.tokens = tokens;
         this.failures = failures;
         this.entryPoint = entryPoint;
+        this.problems = problems;
+        this.repository = repository;
     }
 
     @Override
@@ -67,13 +74,14 @@ public class ApiTokenFilter extends OncePerRequestFilter {
         context.setAuthentication(UsernamePasswordAuthenticationToken.authenticated(principal, null,
                 principal.getAuthorities()));
         contexts.setContext(context);
+        // Mémorisé dans la requête (dépôt de la chaîne) : un re-dispatch garde l'authentification.
+        repository.saveContext(context, request, response);
         chain.doFilter(request, response);
     }
 
-    private static void tooManyFailures(HttpServletResponse response, Duration retryAfter) throws IOException {
-        long seconds = Math.max(1, (retryAfter.toMillis() + 999) / 1000);
-        response.setHeader(HttpHeaders.RETRY_AFTER, String.valueOf(seconds));
-        ApiProblems.write(response, HttpStatus.TOO_MANY_REQUESTS,
+    private void tooManyFailures(HttpServletResponse response, Duration retryAfter) throws IOException {
+        RetryAfter.set(response, retryAfter);
+        problems.write(response, HttpStatus.TOO_MANY_REQUESTS,
                 "Trop de jetons refusés depuis cette adresse, réessayez plus tard");
     }
 }

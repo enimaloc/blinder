@@ -106,6 +106,19 @@ class TagApiTest {
     }
 
     @Test
+    void createRejectsNonTextualNameAndColor() throws Exception {
+        mvc.perform(json(post(BASE), "{\"name\":42}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors.name").value("Texte attendu"));
+        mvc.perform(json(post(BASE), "{\"name\":\"ok\",\"color\":true}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors.color").value("Texte attendu"));
+        mvc.perform(json(post(BASE), "[1]"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors.body").exists());
+    }
+
+    @Test
     void patchDistinguishesAbsentFromNullAndEmptyColor() throws Exception {
         Tag tag = data.tag(admin, "promo");
         String url = BASE + "/" + tag.getId();

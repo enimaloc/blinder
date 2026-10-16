@@ -106,14 +106,13 @@ public class LinkAdminController {
         }
         try {
             Link created = edits.create(owner, form);
-            warnIfExposed(flash, created);
+            warn(flash, owner, created, form);
             edits.refreshPreviewAfterSave(owner, created, null);
         } catch (FieldErrorException e) {
             binding.rejectValue(e.field(), "invalid", e.getMessage());
             return "admin/links/form";
         } catch (DataIntegrityViolationException e) {
-            binding.rejectValue("slug", "duplicate", "Ce slug existe déjà sur ce domaine");
-            return "admin/links/form";
+            return integrity(owner, form, null, binding, model);
         }
         return "redirect:/_/";
     }
@@ -145,7 +144,7 @@ public class LinkAdminController {
             // `current` vient d'un chargement distinct de celui de update() (open-in-view désactivé)
             String previousTarget = current.getTargetUrl();
             Link updated = edits.update(owner, id, form);
-            warnIfExposed(flash, updated);
+            warn(flash, owner, updated, form);
             edits.refreshPreviewAfterSave(owner, updated, previousTarget);
         } catch (FieldErrorException e) {
             binding.rejectValue(e.field(), "invalid", e.getMessage());
@@ -154,10 +153,19 @@ public class LinkAdminController {
             model.addAttribute("staleError", true);
             return "admin/links/form";
         } catch (DataIntegrityViolationException e) {
-            binding.rejectValue("slug", "duplicate", "Ce slug existe déjà sur ce domaine");
-            return "admin/links/form";
+            return integrity(owner, form, id, binding, model);
         }
         return "redirect:/_/";
+    }
+
+    /** « Slug pris » seulement si c'est le cas (relecture) ; sinon une erreur d'enregistrement sans champ. */
+    private String integrity(User owner, LinkForm form, UUID currentId, BindingResult binding, Model model) {
+        if (links.slugTaken(owner, form.getDomainId(), form.getSlug(), currentId)) {
+            binding.rejectValue("slug", "duplicate", "Ce slug existe déjà sur ce domaine");
+        } else {
+            model.addAttribute("conflictError", true);
+        }
+        return "admin/links/form";
     }
 
     @PostMapping("/links/{id}/reset")
@@ -200,10 +208,24 @@ public class LinkAdminController {
         return link.getTags().stream().sorted(java.util.Comparator.comparing(Tag::getNameKey)).toList();
     }
 
-    private static void warnIfExposed(RedirectAttributes flash, Link saved) {
+    /** Avertissements d'après enregistrement, regroupés dans un seul message flash. */
+    private void warn(RedirectAttributes flash, User owner, Link saved, LinkForm form) {
+        List<String> warnings = new java.util.ArrayList<>();
         if (saved.getMetaMode() == MetaMode.PASSTHROUGH && LinkService.isLimitedOrProtected(saved)) {
-            flash.addFlashAttribute("warning", "Aperçu repris de la cible sur un lien limité ou protégé : "
+            warnings.add("Aperçu repris de la cible sur un lien limité ou protégé : "
                     + "son titre, sa description et son image sont visibles publiquement.");
         }
+        if (form.declaresAlerts() && !hasActiveChannel(owner, form)) {
+            warnings.add("Des alertes sont cochées mais aucun canal actif n'est sélectionné : "
+                    + "aucune notification ne sera envoyée.");
+        }
+        if (!warnings.isEmpty()) {
+            flash.addFlashAttribute("warning", String.join(" ", warnings));
+        }
+    }
+
+    private boolean hasActiveChannel(User owner, LinkForm form) {
+        return channels.list(owner).stream()
+                .anyMatch(c -> c.isEnabled() && form.getNotifyChannelIds().contains(c.getId()));
     }
 }

@@ -49,7 +49,8 @@ public class TagApiController {
     }
 
     @PostMapping
-    public ResponseEntity<TagResource> create(@RequestBody TagInput input) {
+    public ResponseEntity<TagResource> create(@RequestBody JsonNode body) {
+        TagInput input = TagInput.parse(body);
         Tag tag = tags.create(currentUser.require(), input.name(), input.color());
         return ResponseEntity.created(URI.create(BASE + "/" + tag.getId())).body(TagResource.of(tag, 0));
     }

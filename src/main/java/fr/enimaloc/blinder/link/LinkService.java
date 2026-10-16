@@ -33,7 +33,9 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.EnumSet;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -140,6 +142,19 @@ public class LinkService {
         return links.findDeviceIds(linkId);
     }
 
+    /**
+     * Appareils autorisés de chaque lien de {@code owner}, en une requête ; un lien sans appareil, ou d'un autre
+     * propriétaire, n'a pas d'entrée.
+     */
+    @Transactional(readOnly = true)
+    public Map<UUID, List<UUID>> deviceIds(User owner, Collection<UUID> linkIds) {
+        if (linkIds.isEmpty()) {
+            return Map.of();
+        }
+        return links.findDeviceIdPairs(owner, linkIds).stream().collect(Collectors.groupingBy(
+                row -> (UUID) row[0], Collectors.mapping(row -> (UUID) row[1], Collectors.toList())));
+    }
+
     @Transactional(readOnly = true)
     public Link get(User owner, UUID id) {
         return links.findByIdAndOwner(id, owner)
@@ -237,6 +252,22 @@ public class LinkService {
         links.delete(get(owner, id));
     }
 
+    /**
+     * Relecture après une violation d'intégrité : le slug demandé est-il effectivement pris par un autre lien du
+     * domaine ? {@code false} si le slug est vide (généré) ou le domaine inconnu : la violation a une autre cause.
+     */
+    @Transactional(readOnly = true)
+    public boolean slugTaken(User owner, UUID domainId, String rawSlug, UUID currentId) {
+        if (domainId == null || rawSlug == null || rawSlug.isBlank()) {
+            return false;
+        }
+        String slug = slugs.normalize(rawSlug);
+        return domains.findByIdAndOwner(domainId, owner)
+                .flatMap(domain -> links.findByDomainAndSlug(domain, slug))
+                .filter(existing -> !existing.getId().equals(currentId))
+                .isPresent();
+    }
+
     private Domain ownedDomain(User owner, UUID domainId) {
         return domains.findByIdAndOwner(domainId, owner)
                 .orElseThrow(() -> new FieldErrorException("domainId", "Domaine inconnu"));
@@ -272,8 +303,8 @@ public class LinkService {
         if (deniedUrl != null && !UrlPolicy.isHttpUrl(deniedUrl)) {
             throw new FieldErrorException("deniedUrl", "URL http(s) absolue requise");
         }
-        Instant notBefore = toInstant(form.getNotBefore());
-        Instant expiresAt = toInstant(form.getExpiresAt());
+        Instant notBefore = resolveDate(form.getNotBefore(), form.getExactNotBefore(), link.getNotBefore());
+        Instant expiresAt = resolveDate(form.getExpiresAt(), form.getExactExpiresAt(), link.getExpiresAt());
         if (notBefore != null && expiresAt != null && !notBefore.isBefore(expiresAt)) {
             throw new FieldErrorException("expiresAt", "L'expiration doit être postérieure à l'activation");
         }
@@ -347,8 +378,27 @@ public class LinkService {
         }
     }
 
-    private Instant toInstant(LocalDateTime local) {
-        return local == null ? null : local.atZone(zone).toInstant();
+    /**
+     * Instant d'une date du formulaire, sans ambiguïté autour des changements d'heure :
+     * l'instant exact (API) s'il correspond à l'heure locale ; sinon l'instant actuel si l'heure locale est
+     * inchangée (à la minute près, précision du panel) ; sinon le premier décalage dans l'heure répétée.
+     */
+    Instant resolveDate(LocalDateTime local, Instant exact, Instant current) {
+        if (local == null) {
+            return null;
+        }
+        if (exact != null && local.equals(toLocal(exact))) {
+            return exact;
+        }
+        if (current != null) {
+            LocalDateTime currentLocal = toLocal(current);
+            boolean minutePrecision = local.getSecond() == 0 && local.getNano() == 0;
+            if (local.equals(currentLocal)
+                    || (minutePrecision && local.equals(currentLocal.truncatedTo(ChronoUnit.MINUTES)))) {
+                return current;
+            }
+        }
+        return local.atZone(zone).toInstant();
     }
 
     private LocalDateTime toLocal(Instant instant) {
