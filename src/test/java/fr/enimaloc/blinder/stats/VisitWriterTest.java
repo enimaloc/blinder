@@ -6,6 +6,7 @@ import fr.enimaloc.blinder.link.Link;
 import fr.enimaloc.blinder.link.LinkRepository;
 import fr.enimaloc.blinder.support.TestData;
 import org.junit.jupiter.api.BeforeEach;
+import org.mockito.AdditionalAnswers;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -23,6 +24,8 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.mock;
 
 @SpringBootTest(properties = "blinder.admin.time-zone=Europe/Paris")
 @Import(TestData.class)
@@ -51,6 +54,10 @@ class VisitWriterTest {
     }
 
     VisitWriter writer(int capacity, GeoLocator geo, VisitBatchListener... listeners) {
+        return writer(links, capacity, geo, listeners);
+    }
+
+    VisitWriter writer(LinkRepository linkRepository, int capacity, GeoLocator geo, VisitBatchListener... listeners) {
         ObjectProvider<VisitBatchListener> provider = new ObjectProvider<>() {
             @Override
             public java.util.stream.Stream<VisitBatchListener> orderedStream() {
@@ -62,7 +69,7 @@ class VisitWriterTest {
                 return orderedStream();
             }
         };
-        return new VisitWriter(links, visits, stats, tx, new StatsProperties(Duration.ofDays(90), capacity,
+        return new VisitWriter(linkRepository, visits, stats, tx, new StatsProperties(Duration.ofDays(90), capacity,
                 Duration.ofMillis(50), false), blinder, geo, provider);
     }
 
@@ -113,6 +120,46 @@ class VisitWriterTest {
         assertThatCode(w::flush).doesNotThrowAnyException();
         assertThat(visits.findAll()).singleElement().satisfies(v -> assertThat(v.getIp()).isEqualTo("1.1.1.2"));
         assertThat(w.dropped()).isZero();
+    }
+
+    @Test
+    void linkDeletedDuringTheBatchOnlyLosesItsOwnVisits() {
+        Link doomed = data.link(link.getDomain(), "doomed", "https://example.com/d");
+        Link loaded = links.findById(doomed.getId()).orElseThrow();
+        // Le lien est trouvé au début du lot puis supprimé avant la validation : la clé étrangère fait échouer le lot.
+        LinkRepository racing = mock(LinkRepository.class, AdditionalAnswers.delegatesTo(links));
+        doReturn(Optional.of(loaded)).doReturn(Optional.empty()).when(racing).findById(doomed.getId());
+        tx.executeWithoutResult(status -> links.deleteById(doomed.getId()));
+        List<Visit> received = new ArrayList<>();
+        VisitWriter w = writer(racing, 10, new NoopGeoLocator(), received::addAll);
+        w.offer(record(link.getId(), Instant.now(), "1.1.1.1"));
+        w.offer(record(doomed.getId(), Instant.now(), "1.1.1.2"));
+        w.offer(record(link.getId(), Instant.now(), "1.1.1.3"));
+
+        assertThatCode(w::flush).doesNotThrowAnyException();
+
+        assertThat(visits.findAll()).extracting(Visit::getIp).containsExactlyInAnyOrder("1.1.1.1", "1.1.1.3");
+        assertThat(stats.findAll()).singleElement().satisfies(s -> assertThat(s.getVisits()).isEqualTo(2));
+        assertThat(received).extracting(Visit::getIp).containsExactlyInAnyOrder("1.1.1.1", "1.1.1.3");
+        // Les visites d'un lien supprimé ne sont pas « perdues » : elles auraient disparu avec lui.
+        assertThat(w.dropped()).isZero();
+    }
+
+    @Test
+    void aVisitThatCannotBeEnrichedIsTheOnlyOneLost() {
+        GeoLocator picky = ip -> {
+            if (ip.equals("6.6.6.6")) {
+                throw new IllegalStateException("boom");
+            }
+            return Optional.empty();
+        };
+        VisitWriter w = writer(10, picky);
+        w.offer(record(link.getId(), Instant.now(), "1.1.1.1"));
+        w.offer(record(link.getId(), Instant.now(), "6.6.6.6"));
+        w.offer(record(link.getId(), Instant.now(), "1.1.1.3"));
+        w.flush();
+        assertThat(visits.findAll()).extracting(Visit::getIp).containsExactlyInAnyOrder("1.1.1.1", "1.1.1.3");
+        assertThat(w.dropped()).isEqualTo(1);
     }
 
     @Test

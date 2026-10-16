@@ -123,18 +123,19 @@ public class VisitWriter implements SmartLifecycle {
         if (batch.isEmpty()) {
             return;
         }
-        List<Visit> persisted;
-        try {
-            List<Enriched> enriched = new ArrayList<>(batch.size());
-            for (VisitRecord record : batch) {
+        List<Enriched> enriched = new ArrayList<>(batch.size());
+        for (VisitRecord record : batch) {
+            try {
                 enriched.add(enrich(record));
+            } catch (Throwable t) {
+                log.error("Enrichissement d'une visite du lien {} impossible, visite abandonnée", record.linkId(), t);
+                dropped.incrementAndGet();
             }
-            persisted = transactions.execute(status -> persist(enriched));
-        } catch (Throwable t) {
-            log.error("Écriture d'un lot de {} visites impossible, lot abandonné", batch.size(), t);
-            dropped.addAndGet(batch.size());
+        }
+        if (enriched.isEmpty()) {
             return;
         }
+        List<Visit> persisted = persistBatch(enriched);
         if (persisted == null || persisted.isEmpty()) {
             return;
         }
@@ -149,6 +150,36 @@ public class VisitWriter implements SmartLifecycle {
         } catch (Throwable t) {
             log.error("Écouteurs de visites inaccessibles", t);
         }
+    }
+
+    private List<Visit> persistBatch(List<Enriched> enriched) {
+        try {
+            return transactions.execute(status -> persist(enriched));
+        } catch (Throwable t) {
+            // Typiquement un lien supprimé entre sa lecture et la validation : on isole la ou les visites fautives.
+            log.warn("Écriture d'un lot de {} visites impossible, nouvel essai visite par visite", enriched.size(), t);
+            return writeOneByOne(enriched);
+        }
+    }
+
+    /**
+     * Une transaction par visite : le lien est relu, donc une visite d'un lien supprimé entre-temps est ignorée
+     * (comme à l'ordinaire) ; seules les visites dont l'écriture échoue encore sont comptées comme perdues.
+     */
+    private List<Visit> writeOneByOne(List<Enriched> enriched) {
+        List<Visit> written = new ArrayList<>(enriched.size());
+        for (Enriched e : enriched) {
+            try {
+                List<Visit> one = transactions.execute(status -> persist(List.of(e)));
+                if (one != null) {
+                    written.addAll(one);
+                }
+            } catch (Throwable t) {
+                log.error("Écriture d'une visite du lien {} impossible, visite abandonnée", e.record().linkId(), t);
+                dropped.incrementAndGet();
+            }
+        }
+        return written;
     }
 
     private record Enriched(VisitRecord record, UserAgentClassifier.Result agent, String refererHost,
