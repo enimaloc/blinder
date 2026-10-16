@@ -9,6 +9,7 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.factory.PasswordEncoderFactories;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 
 @Configuration(proxyBeanMethods = false)
 public class SecurityConfig {
@@ -47,8 +48,9 @@ public class SecurityConfig {
                     .requestCache(cache -> cache.disable())
                     // Cache-Control est posé explicitement par RedirectController (no-store).
                     .headers(headers -> headers.cacheControl(cache -> cache.disable()))
-                    // Aucun endpoint public ne modifie d'état au lot 1 ; le lot 2 réévaluera (formulaire mot de passe).
-                    .csrf(csrf -> csrf.disable());
+                    // Formulaire de mot de passe : CSRF sans session, jeton dans un cookie HttpOnly
+                    // (Thymeleaf l'injecte côté serveur via th:action).
+                    .csrf(csrf -> csrf.csrfTokenRepository(new CookieCsrfTokenRepository()));
             return http.build();
         }
     }

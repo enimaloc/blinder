@@ -14,6 +14,9 @@ import java.time.Instant;
 @RequiredArgsConstructor
 public class VisitContextFactory {
 
+    static final String PASSWORD_QUERY_PARAM = "pw";
+    static final String PASSWORD_FORM_FIELD = "password";
+
     private final Clock clock;
     private final BotDetector botDetector;
 
@@ -24,6 +27,14 @@ public class VisitContextFactory {
                 userAgent == null ? "" : userAgent,
                 botDetector.isBot(userAgent),
                 request.getMethod(),
-                Instant.now(clock));
+                Instant.now(clock),
+                submittedPassword(request),
+                null);
+    }
+
+    private static String submittedPassword(HttpServletRequest request) {
+        return "POST".equals(request.getMethod())
+                ? request.getParameter(PASSWORD_FORM_FIELD)
+                : request.getParameter(PASSWORD_QUERY_PARAM);
     }
 }
