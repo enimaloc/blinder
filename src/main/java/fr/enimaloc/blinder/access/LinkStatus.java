@@ -2,6 +2,7 @@ package fr.enimaloc.blinder.access;
 
 public enum LinkStatus {
     ACTIVE("Actif"),
+    PROTECTED("Protégé"),
     SCHEDULED("Programmé"),
     EXPIRED("Expiré"),
     EXHAUSTED("Épuisé"),

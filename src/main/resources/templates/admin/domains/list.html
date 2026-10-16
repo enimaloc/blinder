@@ -6,6 +6,7 @@
 <main>
     <h1>Domaines</h1>
     <p class="error" th:if="${error}" th:text="${error}"></p>
+    <p class="notice" th:if="${info}" th:text="${info}"></p>
     <p><a th:href="@{/_/domains/new}">Ajouter un domaine</a></p>
     <table>
         <tr><th>Domaine</th><th>État</th><th>Slug inconnu</th><th></th></tr>

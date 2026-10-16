@@ -1,5 +1,10 @@
 package fr.enimaloc.blinder.persistence;
 
+import fr.enimaloc.blinder.device.Device;
+import fr.enimaloc.blinder.device.DeviceCredentialRepository;
+import fr.enimaloc.blinder.device.DeviceEnrollmentRepository;
+import fr.enimaloc.blinder.device.DeviceRepository;
+import fr.enimaloc.blinder.device.DeviceTokens;
 import fr.enimaloc.blinder.domain.Domain;
 import fr.enimaloc.blinder.link.Link;
 import fr.enimaloc.blinder.link.LinkRepository;
@@ -42,6 +47,13 @@ abstract class AbstractPersistenceTest {
 
     @Autowired
     UsageCounter usageCounter;
+
+    @Autowired
+    DeviceRepository devices;
+    @Autowired
+    DeviceCredentialRepository credentials;
+    @Autowired
+    DeviceEnrollmentRepository enrollments;
 
     @Autowired
     PlatformTransactionManager transactionManager;
@@ -232,5 +244,94 @@ abstract class AbstractPersistenceTest {
         Link found = links.findById(link.getId()).orElseThrow();
         assertThat(found.getUseCount()).isZero();
         assertThat(found.getFirstUsedAt()).isNull();
+    }
+
+    @Test
+    void roundTripsProtectionFields() {
+        Link link = new Link(domain, "prot", "https://example.com", owner);
+        link.setPasswordHash("{bcrypt}hash");
+        link.setIpAllowlist("10.0.0.0/8,2001:db8:0:0:0:0:0:0/32");
+        data.save(link);
+
+        Link found = links.findById(link.getId()).orElseThrow();
+        assertThat(found.getPasswordHash()).isEqualTo("{bcrypt}hash");
+        assertThat(found.getIpAllowlist()).isEqualTo("10.0.0.0/8,2001:db8:0:0:0:0:0:0/32");
+    }
+
+    @Test
+    void deletingDeviceCascadesToLinksAndCredentials() {
+        Link link = data.link(domain, "dev", "https://example.com");
+        Device device = data.device(owner, "Laptop");
+        data.credential(device, domain);
+        data.allowDevice(link, device);
+        assertThat(links.isDeviceAllowed(link.getId(), device.getId())).isTrue();
+        assertThat(links.findDeviceIds(link.getId())).containsExactly(device.getId());
+
+        devices.deleteById(device.getId());
+
+        assertThat(links.findDeviceIds(link.getId())).isEmpty();
+        assertThat(links.isDeviceAllowed(link.getId(), device.getId())).isFalse();
+        assertThat(credentials.countByDeviceId(device.getId())).isZero();
+        assertThat(links.findById(link.getId())).get().extracting(Link::isDeviceProtected).isEqualTo(true);
+    }
+
+    @Test
+    void deletingLinkKeepsDevice() {
+        Link link = data.link(domain, "dev2", "https://example.com");
+        Device device = data.device(owner, "Phone");
+        data.allowDevice(link, device);
+
+        links.deleteById(link.getId());
+
+        assertThat(devices.findById(device.getId())).isPresent();
+    }
+
+    @Test
+    void enrollmentIsConsumedAtomicallyOnce() {
+        Instant now = Instant.now();
+        String token = data.enrollment(owner, domain, "Tablet", now.plusSeconds(600));
+        String hash = DeviceTokens.sha256(token);
+        assertThat(enrollments.consume(hash, now)).isEqualTo(1);
+        assertThat(enrollments.consume(hash, now)).isZero();
+        assertThat(enrollments.findByTokenHash(hash).orElseThrow().getUsedAt()).isNotNull();
+    }
+
+    @Test
+    void expiredEnrollmentCannotBeConsumed() {
+        Instant now = Instant.now();
+        String token = data.enrollment(owner, domain, "Old", now.minusSeconds(1));
+        assertThat(enrollments.consume(DeviceTokens.sha256(token), now)).isZero();
+    }
+
+    @Test
+    void syncTicketRotatesOnlyOnce() {
+        Instant now = Instant.now();
+        Device device = data.device(owner, "Laptop");
+        String a = "a".repeat(64);
+        String b = "b".repeat(64);
+        devices.setTicket(device.getId(), a, now.plusSeconds(120));
+
+        assertThat(devices.rotateTicket(device.getId(), a, b, now.plusSeconds(120), now)).isEqualTo(1);
+        assertThat(devices.rotateTicket(device.getId(), a, "c".repeat(64), now.plusSeconds(120), now)).isZero();
+        assertThat(devices.clearTicket(device.getId(), b, now)).isEqualTo(1);
+        assertThat(devices.clearTicket(device.getId(), b, now)).isZero();
+        assertThat(devices.findById(device.getId()).orElseThrow().getSyncTicketHash()).isNull();
+    }
+
+    @Test
+    void expiredSyncTicketCannotRotate() {
+        Instant now = Instant.now();
+        Device device = data.device(owner, "Laptop");
+        devices.setTicket(device.getId(), "a".repeat(64), now.minusSeconds(1));
+        assertThat(devices.rotateTicket(device.getId(), "a".repeat(64), "b".repeat(64), now.plusSeconds(120), now))
+                .isZero();
+    }
+
+    @Test
+    void credentialIsUniquePerDeviceAndDomain() {
+        Device device = data.device(owner, "Laptop");
+        data.credential(device, domain);
+        assertThatThrownBy(() -> data.credential(device, domain))
+                .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
     }
 }

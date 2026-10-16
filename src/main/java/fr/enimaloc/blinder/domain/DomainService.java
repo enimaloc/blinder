@@ -4,6 +4,8 @@ import fr.enimaloc.blinder.common.FieldErrorException;
 import fr.enimaloc.blinder.common.HostNormalizer;
 import fr.enimaloc.blinder.common.UrlPolicy;
 import fr.enimaloc.blinder.common.StaleEditException;
+import fr.enimaloc.blinder.device.DeviceEnrollmentRepository;
+import fr.enimaloc.blinder.device.DeviceRepository;
 import fr.enimaloc.blinder.link.LinkRepository;
 import fr.enimaloc.blinder.security.AdminRequestMatcher;
 import fr.enimaloc.blinder.user.User;
@@ -12,8 +14,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.time.Clock;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -22,11 +26,18 @@ public class DomainService {
     private final DomainRepository domains;
     private final LinkRepository links;
     private final AdminRequestMatcher adminMatcher;
+    private final DeviceEnrollmentRepository enrollments;
+    private final DeviceRepository devices;
+    private final Clock clock;
 
-    public DomainService(DomainRepository domains, LinkRepository links, AdminRequestMatcher adminMatcher) {
+    public DomainService(DomainRepository domains, LinkRepository links, AdminRequestMatcher adminMatcher,
+                         DeviceEnrollmentRepository enrollments, DeviceRepository devices, Clock clock) {
         this.domains = domains;
         this.links = links;
         this.adminMatcher = adminMatcher;
+        this.enrollments = enrollments;
+        this.devices = devices;
+        this.clock = clock;
     }
 
     @Transactional(readOnly = true)
@@ -67,15 +78,23 @@ public class DomainService {
         return domains.save(domain);
     }
 
-    /** @return {@code false} si le domaine contient encore des liens. */
+    /** @return le motif du refus, vide si le domaine a été supprimé. */
     @Transactional
-    public boolean delete(User owner, UUID id) {
+    public Optional<String> delete(User owner, UUID id) {
         Domain domain = get(owner, id);
         if (links.existsByDomain(domain)) {
-            return false;
+            return Optional.of("Ce domaine contient encore des liens.");
+        }
+        if (enrollments.hasPending(domain, clock.instant())) {
+            return Optional.of("Ce domaine a des enrôlements d'appareil en attente.");
         }
         domains.delete(domain);
-        return true;
+        return Optional.empty();
+    }
+
+    @Transactional(readOnly = true)
+    public boolean ownerHasDevices(User owner) {
+        return devices.existsByOwner(owner);
     }
 
     private String checkedHost(String raw, UUID currentId) {

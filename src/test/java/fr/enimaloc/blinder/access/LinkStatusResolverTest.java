@@ -50,4 +50,18 @@ class LinkStatusResolverTest {
         exhausted.setUseCount(1);
         assertThat(resolver.statusOf(exhausted)).isEqualTo(LinkStatus.EXHAUSTED);
     }
+
+    @Test
+    void protectedLinksAreReportedAsProtected() {
+        LinkStatusResolver challenged = new LinkStatusResolver(
+                new AccessEvaluator(List.of((l, c) -> new Challenge(ChallengeType.PASSWORD, false))),
+                Clock.fixed(NOW, ZoneOffset.UTC));
+        assertThat(challenged.statusOf(link())).isEqualTo(LinkStatus.PROTECTED);
+
+        LinkStatusResolver forbidden = new LinkStatusResolver(
+                new AccessEvaluator(List.of((l, c) -> new Deny(DenyReason.FORBIDDEN))),
+                Clock.fixed(NOW, ZoneOffset.UTC));
+        assertThat(forbidden.statusOf(link())).isEqualTo(LinkStatus.PROTECTED);
+        assertThat(LinkStatus.PROTECTED.label()).isEqualTo("Protégé");
+    }
 }

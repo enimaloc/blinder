@@ -5,6 +5,7 @@ import fr.enimaloc.blinder.domain.DomainForm;
 import fr.enimaloc.blinder.common.StaleEditException;
 import fr.enimaloc.blinder.domain.DomainService;
 import fr.enimaloc.blinder.user.CurrentUser;
+import fr.enimaloc.blinder.user.User;
 import jakarta.validation.Valid;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
@@ -42,18 +43,24 @@ public class DomainAdminController {
     }
 
     @PostMapping
-    public String create(@Valid @ModelAttribute("form") DomainForm form, BindingResult binding) {
+    public String create(@Valid @ModelAttribute("form") DomainForm form, BindingResult binding,
+                         RedirectAttributes redirect) {
         if (binding.hasErrors()) {
             return "admin/domains/form";
         }
+        User owner = currentUser.require();
         try {
-            domains.create(currentUser.require(), form);
+            domains.create(owner, form);
         } catch (FieldErrorException e) {
             binding.rejectValue(e.field(), "invalid", e.getMessage());
             return "admin/domains/form";
         } catch (DataIntegrityViolationException e) {
             binding.rejectValue("host", "duplicate", "Ce domaine est déjà déclaré");
             return "admin/domains/form";
+        }
+        if (domains.ownerHasDevices(owner)) {
+            redirect.addFlashAttribute("info",
+                    "Les appareils déjà autorisés doivent se resynchroniser (/_/device/resync) pour être reconnus sur ce domaine.");
         }
         return "redirect:/_/domains";
     }
@@ -90,9 +97,8 @@ public class DomainAdminController {
     @PostMapping("/{id}/delete")
     public String delete(@PathVariable UUID id, RedirectAttributes redirect) {
         try {
-            if (!domains.delete(currentUser.require(), id)) {
-                redirect.addFlashAttribute("error", "Ce domaine contient encore des liens.");
-            }
+            domains.delete(currentUser.require(), id)
+                    .ifPresent(reason -> redirect.addFlashAttribute("error", reason));
         } catch (DataIntegrityViolationException e) {
             redirect.addFlashAttribute("error", "Ce domaine contient encore des liens.");
         }

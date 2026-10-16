@@ -7,9 +7,12 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
+import lombok.ToString;
 import org.springframework.format.annotation.DateTimeFormat;
 
 import java.time.LocalDateTime;
+import java.util.LinkedHashSet;
+import java.util.Set;
 import java.util.UUID;
 
 @Data
@@ -47,4 +50,19 @@ public class LinkForm {
     private String deniedUrl;
 
     private Long version;
+
+    /** Vide = conserver le mot de passe actuel. Jamais réaffiché. */
+    @ToString.Exclude
+    private String newPassword;
+
+    private boolean removePassword;
+
+    /** Une entrée par ligne (IP ou CIDR). */
+    @Size(max = 4000)
+    private String ipAllowlist;
+
+    /** Réserver aux appareils autorisés (reste coché même si plus aucun appareil ne subsiste). */
+    private boolean deviceProtected;
+
+    private Set<UUID> deviceIds = new LinkedHashSet<>();
 }

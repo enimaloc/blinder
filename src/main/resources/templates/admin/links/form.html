@@ -39,6 +39,23 @@
         <label for="deniedUrl">URL en cas de refus (optionnel)</label>
         <input id="deniedUrl" type="url" th:field="*{deniedUrl}">
         <p class="error" th:errors="*{deniedUrl}"></p>
+        <fieldset>
+            <legend>Protection (un seul moyen valide suffit)</legend>
+            <label for="newPassword" th:text="${hasPassword} ? 'Nouveau mot de passe (vide = conserver)' : 'Mot de passe (optionnel)'">Mot de passe</label>
+            <input id="newPassword" type="password" autocomplete="new-password" th:field="*{newPassword}">
+            <p class="error" th:errors="*{newPassword}"></p>
+            <label th:if="${hasPassword}"><input type="checkbox" th:field="*{removePassword}"> Supprimer le mot de passe</label>
+            <label for="ipAllowlist">IP ou plages CIDR autorisées (une par ligne)</label>
+            <textarea id="ipAllowlist" rows="3" th:field="*{ipAllowlist}"></textarea>
+            <p class="error" th:errors="*{ipAllowlist}"></p>
+            <p class="notice" th:if="${devices.isEmpty()}">Aucun appareil : <a th:href="@{/_/devices/new}">en enrôler un</a>.</p>
+            <label><input type="checkbox" th:field="*{deviceProtected}"> Réserver aux appareils autorisés</label>
+            <p class="notice" th:if="${noDeviceLeft}">Aucun appareil autorisé restant : ce lien n'est accessible qu'avec un autre moyen configuré, sinon à personne.</p>
+            <label th:each="d : ${devices}">
+                <input type="checkbox" th:field="*{deviceIds}" th:value="${d.id}"> <span th:text="${d.name}"></span>
+            </label>
+            <p class="error" th:errors="*{deviceIds}"></p>
+        </fieldset>
         <p><button type="submit">Enregistrer</button></p>
     </form>
     <th:block th:if="${linkId != null}">

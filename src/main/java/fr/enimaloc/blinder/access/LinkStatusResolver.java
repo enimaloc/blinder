@@ -22,12 +22,13 @@ public class LinkStatusResolver {
         VisitContext synthetic = new VisitContext("admin", "", false, "GET", Instant.now(clock));
         return switch (evaluator.evaluate(link, synthetic)) {
             case Allow a -> LinkStatus.ACTIVE;
-            case Challenge c -> LinkStatus.ACTIVE;
+            case Challenge c -> LinkStatus.PROTECTED;
             case Deny(DenyReason reason) -> switch (reason) {
                 case DISABLED -> LinkStatus.DISABLED;
                 case NOT_YET -> LinkStatus.SCHEDULED;
                 case EXPIRED -> LinkStatus.EXPIRED;
                 case EXHAUSTED -> LinkStatus.EXHAUSTED;
+                case FORBIDDEN -> LinkStatus.PROTECTED;
             };
         };
     }

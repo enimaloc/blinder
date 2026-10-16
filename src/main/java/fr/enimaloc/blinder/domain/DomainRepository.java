@@ -14,4 +14,6 @@ public interface DomainRepository extends JpaRepository<Domain, UUID> {
     List<Domain> findAllByOwnerOrderByHost(User owner);
 
     Optional<Domain> findByIdAndOwner(UUID id, User owner);
+
+    List<Domain> findAllByOwnerAndEnabledTrueOrderByHost(User owner);
 }

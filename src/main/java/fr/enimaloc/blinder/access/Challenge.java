@@ -1,5 +1,9 @@
 package fr.enimaloc.blinder.access;
 
-/** Demande une interaction (mot de passe…) avant d'autoriser. Utilisé à partir du lot 2. */
-public record Challenge(String view) implements AccessDecision {
+/**
+ * Demande une interaction avant d'autoriser.
+ *
+ * @param rejected {@code true} si une réponse a été fournie et refusée (mauvais mot de passe)
+ */
+public record Challenge(ChallengeType type, boolean rejected) implements AccessDecision {
 }

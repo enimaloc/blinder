@@ -2,6 +2,7 @@ package fr.enimaloc.blinder.link;
 
 import fr.enimaloc.blinder.common.BaseEntity;
 import fr.enimaloc.blinder.common.DurationSecondsConverter;
+import fr.enimaloc.blinder.device.Device;
 import fr.enimaloc.blinder.domain.Domain;
 import fr.enimaloc.blinder.user.User;
 import jakarta.persistence.Column;
@@ -9,6 +10,8 @@ import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.JoinColumn;
+import jakarta.persistence.JoinTable;
+import jakarta.persistence.ManyToMany;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import lombok.AccessLevel;
@@ -19,6 +22,8 @@ import org.hibernate.annotations.OptimisticLock;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.HashSet;
+import java.util.Set;
 
 @Entity
 @Table(name = "links")
@@ -67,6 +72,24 @@ public class Link extends BaseEntity {
 
     @Column(length = 2048)
     private String deniedUrl;
+
+    /** BCrypt (PasswordEncoder délégant) ; {@code null} = pas de mot de passe. */
+    @Column(length = 255)
+    private String passwordHash;
+
+    /** Entrées normalisées par {@code IpAllowlist.normalize}, séparées par des virgules. */
+    @Column(length = 4000)
+    private String ipAllowlist;
+
+    /** Choix explicite de l'admin : reste vrai même si tous les appareils sont révoqués (le lien ne s'ouvre jamais). */
+    @Column(nullable = false)
+    private boolean deviceProtected;
+
+    @ManyToMany
+    @JoinTable(name = "link_devices",
+            joinColumns = @JoinColumn(name = "link_id"),
+            inverseJoinColumns = @JoinColumn(name = "device_id"))
+    private Set<Device> devices = new HashSet<>();
 
     public Link(Domain domain, String slug, String targetUrl, User owner) {
         this.domain = domain;

@@ -27,6 +27,7 @@ import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.servlet.ModelAndView;
 import org.springframework.web.servlet.view.RedirectView;
 
+import java.time.Duration;
 import java.util.Optional;
 
 @Controller
@@ -40,8 +41,9 @@ public class RedirectController {
     private final UsageCounter usageCounter;
     private final VisitContextFactory contexts;
     private final ApplicationEventPublisher events;
+    private final LinkPasswordThrottle throttle;
 
-    @RequestMapping(value = "/{slug}", method = {RequestMethod.GET, RequestMethod.HEAD})
+    @RequestMapping(value = "/{slug}", method = {RequestMethod.GET, RequestMethod.HEAD, RequestMethod.POST})
     public ModelAndView redirect(@PathVariable String slug, HttpServletRequest request, HttpServletResponse response) {
         response.setHeader(HttpHeaders.CACHE_CONTROL, "no-store");
 
@@ -57,7 +59,33 @@ public class RedirectController {
 
         Link link = found.get();
         VisitContext context = contexts.from(request);
-        AccessDecision decision = evaluator.evaluate(link, context);
+        boolean passwordAttempt = context.submittedPassword() != null && link.getPasswordHash() != null;
+        if (passwordAttempt) {
+            Optional<Duration> blocked = throttle.tryReserve(link.getId(), context.clientIp());
+            if (blocked.isPresent()) {
+                return tooManyAttempts(response, blocked.get());
+            }
+        }
+
+        AccessDecision decision;
+        try {
+            decision = evaluator.evaluate(link, context);
+        } catch (RuntimeException | Error e) {
+            if (passwordAttempt) {
+                throttle.abandoned(link.getId(), context.clientIp());
+            }
+            throw e;
+        }
+        if (passwordAttempt) {
+            if (decision instanceof Allow) {
+                throttle.succeeded(link.getId(), context.clientIp());
+            } else if (decision instanceof Challenge challenge && challenge.rejected()) {
+                throttle.rejected(link.getId(), context.clientIp());
+            } else {
+                throttle.abandoned(link.getId(), context.clientIp());
+            }
+        }
+
         boolean counted = false;
         if (decision instanceof Allow && context.countable()) {
             counted = usageCounter.consume(link, context.now());
@@ -75,8 +103,7 @@ public class RedirectController {
                 events.publishEvent(new AccessDenied(link.getId(), reason, context));
                 yield denied(domain.get(), link, reason);
             }
-            case Challenge challenge ->
-                    throw new IllegalStateException("Challenge decisions are not supported before lot 2");
+            case Challenge challenge -> passwordPage(request, challenge.rejected());
         };
     }
 
@@ -92,7 +119,7 @@ public class RedirectController {
         return unknownLink(domain);
     }
 
-    /** Outcome shared by unknown slugs and disabled / not-yet-active links so they are indistinguishable. */
+    /** Outcome shared by unknown slugs and disabled / not-yet-active / forbidden links so they are indistinguishable. */
     private static ModelAndView unknownLink(Domain domain) {
         String notFoundUrl = domain.getNotFoundUrl();
         return notFoundUrl != null ? redirectTo(notFoundUrl) : notFound();
@@ -101,6 +128,23 @@ public class RedirectController {
     private static ModelAndView notFound() {
         ModelAndView mv = new ModelAndView("public/not-found");
         mv.setStatus(HttpStatus.NOT_FOUND);
+        return mv;
+    }
+
+    /** Formulaire de mot de passe : la cible n'apparaît jamais dans le modèle. */
+    private static ModelAndView passwordPage(HttpServletRequest request, boolean rejected) {
+        ModelAndView mv = new ModelAndView("public/password");
+        mv.addObject("action", request.getRequestURI());
+        mv.addObject("rejected", rejected);
+        mv.setStatus(HttpStatus.OK);
+        return mv;
+    }
+
+    private static ModelAndView tooManyAttempts(HttpServletResponse response, Duration retryAfter) {
+        long seconds = Math.max(1, (retryAfter.toMillis() + 999) / 1000);
+        response.setHeader(HttpHeaders.RETRY_AFTER, String.valueOf(seconds));
+        ModelAndView mv = new ModelAndView("public/too-many-attempts");
+        mv.setStatus(HttpStatus.TOO_MANY_REQUESTS);
         return mv;
     }
 

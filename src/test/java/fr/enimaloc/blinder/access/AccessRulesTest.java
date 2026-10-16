@@ -83,8 +83,16 @@ class AccessRulesTest {
     @Test
     void visitContextCountable() {
         assertThat(CTX.countable()).isTrue();
+        assertThat(new VisitContext("ip", "ua", false, "POST", NOW).countable()).isTrue();
         assertThat(new VisitContext("ip", "ua", false, "HEAD", NOW).countable()).isFalse();
         assertThat(new VisitContext("ip", "ua", true, "GET", NOW).countable()).isFalse();
+        assertThat(new VisitContext("ip", "ua", true, "POST", NOW).countable()).isFalse();
+    }
+
+    @Test
+    void shortVisitContextHasNoPasswordNorDevice() {
+        assertThat(CTX.submittedPassword()).isNull();
+        assertThat(CTX.deviceId()).isNull();
     }
 
     @Test
@@ -93,5 +101,6 @@ class AccessRulesTest {
         assertThat(DenyReason.EXHAUSTED.gone()).isTrue();
         assertThat(DenyReason.DISABLED.gone()).isFalse();
         assertThat(DenyReason.NOT_YET.gone()).isFalse();
+        assertThat(DenyReason.FORBIDDEN.gone()).isFalse();
     }
 }

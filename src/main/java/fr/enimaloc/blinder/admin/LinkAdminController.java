@@ -2,6 +2,7 @@ package fr.enimaloc.blinder.admin;
 
 import fr.enimaloc.blinder.access.LinkStatusResolver;
 import fr.enimaloc.blinder.common.FieldErrorException;
+import fr.enimaloc.blinder.device.DeviceService;
 import fr.enimaloc.blinder.domain.Domain;
 import fr.enimaloc.blinder.domain.DomainService;
 import fr.enimaloc.blinder.link.Link;
@@ -36,6 +37,7 @@ public class LinkAdminController {
     private final LinkService links;
     private final DomainService domains;
     private final LinkStatusResolver statuses;
+    private final DeviceService deviceService;
 
     @GetMapping("/")
     public String list(@RequestParam(name = "domain", required = false) UUID domainId, Model model) {
@@ -59,6 +61,8 @@ public class LinkAdminController {
         }
         model.addAttribute("form", form);
         model.addAttribute("domains", owned);
+        model.addAttribute("devices", deviceService.all(owner));
+        model.addAttribute("hasPassword", false);
         return "admin/links/form";
     }
 
@@ -66,6 +70,8 @@ public class LinkAdminController {
     public String create(@Valid @ModelAttribute("form") LinkForm form, BindingResult binding, Model model) {
         User owner = currentUser.require();
         model.addAttribute("domains", domains.list(owner));
+        model.addAttribute("devices", deviceService.all(owner));
+        model.addAttribute("hasPassword", false);
         if (binding.hasErrors()) {
             return "admin/links/form";
         }
@@ -131,5 +137,8 @@ public class LinkAdminController {
         model.addAttribute("status", statuses.statusOf(link));
         model.addAttribute("publicUrl", link.getDomain().getHost() + "/" + link.getSlug());
         model.addAttribute("domains", domains.list(owner));
+        model.addAttribute("devices", deviceService.all(owner));
+        model.addAttribute("hasPassword", link.getPasswordHash() != null);
+        model.addAttribute("noDeviceLeft", links.hasNoDeviceLeft(link));
     }
 }

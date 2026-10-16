@@ -49,4 +49,13 @@ public interface LinkRepository extends JpaRepository<Link, UUID> {
     @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("update Link l set l.useCount = 0, l.firstUsedAt = null where l.id = :id")
     int resetUsage(@Param("id") UUID id);
+
+    @Query("""
+            select case when count(d) > 0 then true else false end from Link l join l.devices d
+             where l.id = :linkId and d.id = :deviceId
+            """)
+    boolean isDeviceAllowed(@Param("linkId") UUID linkId, @Param("deviceId") UUID deviceId);
+
+    @Query("select d.id from Link l join l.devices d where l.id = :linkId")
+    List<UUID> findDeviceIds(@Param("linkId") UUID linkId);
 }
