@@ -29,8 +29,15 @@ public final class RedirectPolicy {
                 && !link.isDeviceProtected();
     }
 
-    /** 301/308 seulement si le lien est nu (repli défensif en 302 sinon) ; 307 toujours ; tout le reste → 302. */
-    public static HttpStatus effectiveStatus(Link link) {
+    /**
+     * POST (formulaires mot de passe / page intermédiaire) → toujours 303, pour que le navigateur ne rejoue jamais
+     * le corps vers la cible. Sinon : 301/308 seulement si le lien est nu (repli défensif en 302) ; 307 toujours ;
+     * tout le reste → 302.
+     */
+    public static HttpStatus effectiveStatus(Link link, String method) {
+        if ("POST".equalsIgnoreCase(method)) {
+            return HttpStatus.SEE_OTHER;
+        }
         return switch (link.getRedirectStatus()) {
             case 307 -> HttpStatus.TEMPORARY_REDIRECT;
             case 301 -> isBare(link) ? HttpStatus.MOVED_PERMANENTLY : HttpStatus.FOUND;

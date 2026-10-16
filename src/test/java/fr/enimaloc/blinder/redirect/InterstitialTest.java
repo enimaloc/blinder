@@ -75,7 +75,7 @@ class InterstitialTest {
     void postContinuesAndCounts() throws Exception {
         Link link = data.save(interstitial("go", "https://dest.example.org/p", 0));
         mvc.perform(post("http://go.example.com/go").with(csrf()))
-                .andExpect(status().isFound())
+                .andExpect(status().isSeeOther())
                 .andExpect(redirectedUrl("https://dest.example.org/p"));
         assertThat(useCount(link)).isEqualTo(1);
     }
@@ -132,5 +132,29 @@ class InterstitialTest {
                 .andExpect(content().string(containsString("/q?utm=1")));
         mvc.perform(post("http://go.example.com/q?utm=1").with(csrf()))
                 .andExpect(redirectedUrl("https://dest.example.org/p?utm=1"));
+    }
+
+    @Test
+    void postIsSeeOtherEvenOnTemporaryAndBareLinks() throws Exception {
+        Link temporary = interstitial("t", "https://dest.example.org/t", 0);
+        temporary.setRedirectStatus(307);
+        data.save(temporary);
+        mvc.perform(post("http://go.example.com/t").with(csrf()))
+                .andExpect(status().isSeeOther())
+                .andExpect(redirectedUrl("https://dest.example.org/t"));
+        Link bare = interstitial("b", "https://dest.example.org/b", 0);
+        bare.setRedirectStatus(308);
+        data.save(bare);
+        mvc.perform(post("http://go.example.com/b").with(csrf()))
+                .andExpect(status().isSeeOther());
+    }
+
+    @Test
+    void plainGetOnTemporaryLinkStaysTemporary() throws Exception {
+        Link link = new Link(domain, "plain", "https://dest.example.org/p", domain.getOwner());
+        link.setRedirectStatus(307);
+        data.save(link);
+        mvc.perform(get("http://go.example.com/plain"))
+                .andExpect(status().isTemporaryRedirect());
     }
 }

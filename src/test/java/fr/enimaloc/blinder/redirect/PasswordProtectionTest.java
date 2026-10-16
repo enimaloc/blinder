@@ -106,9 +106,19 @@ class PasswordProtectionTest {
     @Test
     void rightPasswordInFormRedirectsAndCounts() throws Exception {
         mvc.perform(post("http://go.example.com/secret").with(csrf()).param("password", "open-sesame"))
-                .andExpect(status().isFound())
+                .andExpect(status().isSeeOther())
                 .andExpect(redirectedUrl(TARGET));
         assertThat(useCount()).isEqualTo(1);
+    }
+
+    @Test
+    void passwordPostOnTemporaryLinkIsSeeOtherWithoutPasswordInLocation() throws Exception {
+        link.setRedirectStatus(307);
+        link.setForwardQuery(true);
+        data.save(link);
+        mvc.perform(post("http://go.example.com/secret").with(csrf()).param("password", "open-sesame"))
+                .andExpect(status().isSeeOther())
+                .andExpect(header().string("Location", not(containsString("password"))));
     }
 
     @Test

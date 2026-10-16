@@ -21,6 +21,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.not;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
@@ -72,11 +74,13 @@ class LotThreeEndToEndTest {
         mvc.perform(get("http://go.example.com/article?utm_campaign=launch"))
                 .andExpect(status().isOk())
                 .andExpect(content().string(containsString("news.example.org")))
-                .andExpect(content().string(containsString("id=\"countdown\"")));
+                .andExpect(content().string(containsString("id=\"countdown\"")))
+                .andExpect(content().string(containsString("action=\"/article?utm_campaign=launch\"")));
+        verify(fetcher, times(1)).fetch("https://news.example.org/article?src=blinder");
         assertThat(links.findByDomainAndSlug(domain, "article").orElseThrow().getUseCount()).isZero();
 
         mvc.perform(post("http://go.example.com/article?utm_campaign=launch").with(csrf()))
-                .andExpect(status().isTemporaryRedirect())
+                .andExpect(status().isSeeOther())
                 .andExpect(header().string("Location",
                         "https://news.example.org/article?src=blinder&utm_campaign=launch"));
         assertThat(links.findByDomainAndSlug(domain, "article").orElseThrow().getUseCount()).isEqualTo(1);

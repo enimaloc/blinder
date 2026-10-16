@@ -60,24 +60,33 @@ class RedirectPolicyTest {
     void effectiveStatusFallsBackToFoundUnlessBare() {
         Link bare = link("https://e.com");
         bare.setRedirectStatus(301);
-        assertThat(RedirectPolicy.effectiveStatus(bare)).isEqualTo(HttpStatus.MOVED_PERMANENTLY);
+        assertThat(RedirectPolicy.effectiveStatus(bare, "GET")).isEqualTo(HttpStatus.MOVED_PERMANENTLY);
         bare.setRedirectStatus(308);
-        assertThat(RedirectPolicy.effectiveStatus(bare)).isEqualTo(HttpStatus.PERMANENT_REDIRECT);
+        assertThat(RedirectPolicy.effectiveStatus(bare, "GET")).isEqualTo(HttpStatus.PERMANENT_REDIRECT);
         bare.setRedirectStatus(307);
-        assertThat(RedirectPolicy.effectiveStatus(bare)).isEqualTo(HttpStatus.TEMPORARY_REDIRECT);
+        assertThat(RedirectPolicy.effectiveStatus(bare, "GET")).isEqualTo(HttpStatus.TEMPORARY_REDIRECT);
         bare.setRedirectStatus(302);
-        assertThat(RedirectPolicy.effectiveStatus(bare)).isEqualTo(HttpStatus.FOUND);
+        assertThat(RedirectPolicy.effectiveStatus(bare, "GET")).isEqualTo(HttpStatus.FOUND);
         bare.setRedirectStatus(999);
-        assertThat(RedirectPolicy.effectiveStatus(bare)).isEqualTo(HttpStatus.FOUND);
+        assertThat(RedirectPolicy.effectiveStatus(bare, "GET")).isEqualTo(HttpStatus.FOUND);
 
         Link limited = link("https://e.com");
         limited.setMaxUses(3);
         limited.setRedirectStatus(301);
-        assertThat(RedirectPolicy.effectiveStatus(limited)).isEqualTo(HttpStatus.FOUND);
+        assertThat(RedirectPolicy.effectiveStatus(limited, "GET")).isEqualTo(HttpStatus.FOUND);
         limited.setRedirectStatus(308);
-        assertThat(RedirectPolicy.effectiveStatus(limited)).isEqualTo(HttpStatus.FOUND);
+        assertThat(RedirectPolicy.effectiveStatus(limited, "GET")).isEqualTo(HttpStatus.FOUND);
         limited.setRedirectStatus(307);
-        assertThat(RedirectPolicy.effectiveStatus(limited)).isEqualTo(HttpStatus.TEMPORARY_REDIRECT);
+        assertThat(RedirectPolicy.effectiveStatus(limited, "GET")).isEqualTo(HttpStatus.TEMPORARY_REDIRECT);
+    }
+
+    @Test
+    void postIsAlwaysAnsweredWithSeeOther() {
+        Link bare = link("https://e.com");
+        for (int status : new int[]{301, 302, 307, 308}) {
+            bare.setRedirectStatus(status);
+            assertThat(RedirectPolicy.effectiveStatus(bare, "POST")).isEqualTo(HttpStatus.SEE_OTHER);
+        }
     }
 
     @Test

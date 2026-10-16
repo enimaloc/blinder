@@ -111,7 +111,7 @@ public class RedirectController {
             case Allow allow -> {
                 events.publishEvent(new LinkResolved(link.getId(), context, counted));
                 yield !context.countable() && hasUsageLimits(link) ? preview() : redirectTo(RedirectPolicy.target(link, request.getParameterMap()),
-                        RedirectPolicy.effectiveStatus(link));
+                        RedirectPolicy.effectiveStatus(link, context.httpMethod()));
             }
             case Deny(DenyReason reason) -> {
                 events.publishEvent(new AccessDenied(link.getId(), reason, context));
