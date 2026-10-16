@@ -2,6 +2,7 @@ package fr.enimaloc.blinder.api;
 
 import fr.enimaloc.blinder.api.token.ApiTokenService;
 import fr.enimaloc.blinder.security.RateLimiter;
+import fr.enimaloc.blinder.support.TestJson;
 import fr.enimaloc.blinder.user.Role;
 import fr.enimaloc.blinder.user.User;
 import jakarta.servlet.FilterChain;
@@ -29,7 +30,7 @@ class ApiTokenFilterTest {
 
     private final ApiTokenService tokens = mock(ApiTokenService.class);
     private final RateLimiter failures = new RateLimiter(2, Duration.ofMinutes(15), Clock.systemUTC(), 100);
-    private final JsonMapper json = JsonMapper.builder().build();
+    private final JsonMapper json = TestJson.mapper();
     private final SecurityContextRepository repository = new RequestAttributeSecurityContextRepository();
     private final ApiTokenFilter filter = new ApiTokenFilter(tokens, failures,
             ApiProblems.unauthorized(new ProblemWriter(json)), new ProblemWriter(json), repository);

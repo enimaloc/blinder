@@ -6,14 +6,14 @@ import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockFilterChain;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
-import tools.jackson.databind.json.JsonMapper;
+import fr.enimaloc.blinder.support.TestJson;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 /** Erreurs du conteneur (re-dispatch vers /error) : problème JSON sous /_/api/, page d'erreur habituelle ailleurs. */
 class ApiErrorDispatchFilterTest {
 
-    private final ApiErrorDispatchFilter filter = new ApiErrorDispatchFilter(new ProblemWriter(JsonMapper.builder().build()));
+    private final ApiErrorDispatchFilter filter = new ApiErrorDispatchFilter(new ProblemWriter(TestJson.mapper()));
 
     private MockHttpServletRequest errorRequest(String originalUri, int status) {
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/error");
