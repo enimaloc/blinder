@@ -43,6 +43,7 @@ public class RedirectController {
     private final VisitContextFactory contexts;
     private final ApplicationEventPublisher events;
     private final LinkPasswordThrottle throttle;
+    private final LinkMetaResolver metas;
 
     @RequestMapping(value = "/{slug}", method = {RequestMethod.GET, RequestMethod.HEAD, RequestMethod.POST})
     public ModelAndView redirect(@PathVariable String slug, HttpServletRequest request, HttpServletResponse response) {
@@ -87,6 +88,13 @@ public class RedirectController {
             }
         }
 
+        if (!context.countable() && isAlive(decision)) {
+            Optional<LinkMeta> meta = metas.forLink(link);
+            if (meta.isPresent()) {
+                return metaPage(request, meta.get());
+            }
+        }
+
         if (decision instanceof Allow && context.countable() && showsInterstitial(link, context)) {
             return interstitial(request, link);
         }
@@ -111,6 +119,20 @@ public class RedirectController {
             }
             case Challenge challenge -> passwordPage(request, challenge.rejected());
         };
+    }
+
+    /** Lien existant et ouvert à quelqu'un : autorisé, protégé par mot de passe, ou réservé (appareils/IP). */
+    private static boolean isAlive(AccessDecision decision) {
+        return decision instanceof Allow || decision instanceof Challenge
+                || decision instanceof Deny deny && deny.reason() == DenyReason.FORBIDDEN;
+    }
+
+    private static ModelAndView metaPage(HttpServletRequest request, LinkMeta meta) {
+        ModelAndView mv = new ModelAndView("public/meta");
+        mv.addObject("meta", meta);
+        mv.addObject("pageUrl", request.getRequestURL().toString());
+        mv.setStatus(HttpStatus.OK);
+        return mv;
     }
 
     /** Page intermédiaire : GET comptable, lien sans mot de passe (le formulaire de mot de passe confirme déjà). */
