@@ -65,6 +65,7 @@ public class RedirectController {
         if (passwordAttempt) {
             Optional<Duration> blocked = throttle.tryReserve(link.getId(), context.clientIp());
             if (blocked.isPresent()) {
+                events.publishEvent(new LinkThrottled(link.getId(), context));
                 return tooManyAttempts(response, blocked.get());
             }
         }
@@ -119,13 +120,12 @@ public class RedirectController {
         };
     }
 
-    /** Allow → LinkResolved ; Deny → AccessDenied ; Challenge → rien (pas encore d'issue). */
+    /** Allow → LinkResolved ; Deny → AccessDenied ; Challenge → LinkChallenged. */
     private void publishOutcome(AccessDecision decision, Link link, VisitContext context, boolean counted) {
         switch (decision) {
             case Allow allow -> events.publishEvent(new LinkResolved(link.getId(), context, counted));
             case Deny(DenyReason reason) -> events.publishEvent(new AccessDenied(link.getId(), reason, context));
-            case Challenge challenge -> {
-            }
+            case Challenge c -> events.publishEvent(new LinkChallenged(link.getId(), context, c.rejected()));
         }
     }
 
