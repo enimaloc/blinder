@@ -14,9 +14,6 @@ import fr.enimaloc.blinder.link.Link;
 import fr.enimaloc.blinder.link.LinkRepository;
 import fr.enimaloc.blinder.link.SlugPolicy;
 import fr.enimaloc.blinder.link.UsageCounter;
-import fr.enimaloc.blinder.security.RateLimitKeys;
-import fr.enimaloc.blinder.security.RateLimiter;
-import fr.enimaloc.blinder.security.RateLimiters;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
@@ -44,7 +41,7 @@ public class RedirectController {
     private final UsageCounter usageCounter;
     private final VisitContextFactory contexts;
     private final ApplicationEventPublisher events;
-    private final RateLimiters rateLimiters;
+    private final LinkPasswordThrottle throttle;
 
     @RequestMapping(value = "/{slug}", method = {RequestMethod.GET, RequestMethod.HEAD, RequestMethod.POST})
     public ModelAndView redirect(@PathVariable String slug, HttpServletRequest request, HttpServletResponse response) {
@@ -62,24 +59,30 @@ public class RedirectController {
 
         Link link = found.get();
         VisitContext context = contexts.from(request);
-        String clientKey = RateLimitKeys.linkPassword(link.getId(), context.clientIp());
-        String aggregateKey = RateLimitKeys.linkPasswordAggregate(link.getId());
-        RateLimiter perClient = rateLimiters.linkPassword();
-        RateLimiter aggregate = rateLimiters.linkPasswordAggregate();
         boolean passwordAttempt = context.submittedPassword() != null && link.getPasswordHash() != null;
-        if (passwordAttempt && (perClient.isBlocked(clientKey) || aggregate.isBlocked(aggregateKey))) {
-            Duration retryAfter = perClient.retryAfter(clientKey);
-            Duration aggregateRetry = aggregate.retryAfter(aggregateKey);
-            return tooManyAttempts(response, retryAfter.compareTo(aggregateRetry) >= 0 ? retryAfter : aggregateRetry);
+        if (passwordAttempt) {
+            Optional<Duration> blocked = throttle.tryReserve(link.getId(), context.clientIp());
+            if (blocked.isPresent()) {
+                return tooManyAttempts(response, blocked.get());
+            }
         }
 
-        AccessDecision decision = evaluator.evaluate(link, context);
+        AccessDecision decision;
+        try {
+            decision = evaluator.evaluate(link, context);
+        } catch (RuntimeException | Error e) {
+            if (passwordAttempt) {
+                throttle.abandoned(link.getId(), context.clientIp());
+            }
+            throw e;
+        }
         if (passwordAttempt) {
-            if (decision instanceof Challenge challenge && challenge.rejected()) {
-                perClient.recordFailure(clientKey);
-                aggregate.recordFailure(aggregateKey);
-            } else if (decision instanceof Allow) {
-                perClient.reset(clientKey);
+            if (decision instanceof Allow) {
+                throttle.succeeded(link.getId(), context.clientIp());
+            } else if (decision instanceof Challenge challenge && challenge.rejected()) {
+                throttle.rejected(link.getId(), context.clientIp());
+            } else {
+                throttle.abandoned(link.getId(), context.clientIp());
             }
         }
 

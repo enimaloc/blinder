@@ -10,6 +10,7 @@ import org.springframework.security.crypto.factory.PasswordEncoderFactories;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
+import org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter;
 
 @Configuration(proxyBeanMethods = false)
 public class SecurityConfig {
@@ -47,7 +48,10 @@ public class SecurityConfig {
                     .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                     .requestCache(cache -> cache.disable())
                     // Cache-Control est posé explicitement par RedirectController (no-store).
-                    .headers(headers -> headers.cacheControl(cache -> cache.disable()))
+                    .headers(headers -> headers
+                            .cacheControl(cache -> cache.disable())
+                            // Le mot de passe peut figurer dans l'URL (?pw=) : ne jamais le fuiter via Referer.
+                            .referrerPolicy(policy -> policy.policy(ReferrerPolicyHeaderWriter.ReferrerPolicy.NO_REFERRER)))
                     // Formulaire de mot de passe : CSRF sans session, jeton dans un cookie HttpOnly
                     // (Thymeleaf l'injecte côté serveur via th:action).
                     .csrf(csrf -> csrf.csrfTokenRepository(new CookieCsrfTokenRepository()));

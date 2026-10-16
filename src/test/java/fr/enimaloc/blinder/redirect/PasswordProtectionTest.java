@@ -16,6 +16,12 @@ import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
@@ -207,5 +213,60 @@ class PasswordProtectionTest {
                 .andReturn();
         assertThat(Long.parseLong(blocked.getResponse().getHeader("Retry-After"))).isPositive();
         assertThat(links.findById(shared.getId()).orElseThrow().getUseCount()).isZero();
+    }
+
+    @Test
+    void concurrentWrongPasswordsNeverExceedTheClientLimit() throws Exception {
+        int threads = 20;
+        ExecutorService pool = Executors.newFixedThreadPool(threads);
+        CountDownLatch ready = new CountDownLatch(threads);
+        CountDownLatch go = new CountDownLatch(1);
+        List<Future<Integer>> results = new ArrayList<>();
+        for (int i = 0; i < threads; i++) {
+            int n = i;
+            results.add(pool.submit(() -> {
+                ready.countDown();
+                go.await();
+                return mvc.perform(post("http://go.example.com/secret").with(csrf()).with(from("198.51.100.77"))
+                                .param("password", "wrong-" + n))
+                        .andReturn().getResponse().getStatus();
+            }));
+        }
+        ready.await();
+        go.countDown();
+        int ok = 0;
+        int limited = 0;
+        for (Future<Integer> f : results) {
+            int status = f.get();
+            if (status == 200) {
+                ok++;
+            } else if (status == 429) {
+                limited++;
+            }
+        }
+        pool.shutdown();
+        assertThat(ok).isEqualTo(5);
+        assertThat(limited).isEqualTo(15);
+    }
+
+    @Test
+    void publicResponsesCarryNoReferrerPolicy() throws Exception {
+        mvc.perform(get("http://go.example.com/secret"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Referrer-Policy", "no-referrer"));
+        mvc.perform(get("http://go.example.com/secret").param("pw", "open-sesame"))
+                .andExpect(status().isFound())
+                .andExpect(header().string("Referrer-Policy", "no-referrer"));
+    }
+
+    @Test
+    void redirectsDoNotSetCookies() throws Exception {
+        mvc.perform(get("http://go.example.com/secret").param("pw", "open-sesame"))
+                .andExpect(status().isFound())
+                .andExpect(header().doesNotExist("Set-Cookie"));
+        data.save(new Link(domain, "plain", TARGET, domain.getOwner()));
+        mvc.perform(get("http://go.example.com/plain"))
+                .andExpect(status().isFound())
+                .andExpect(header().doesNotExist("Set-Cookie"));
     }
 }

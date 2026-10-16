@@ -18,4 +18,13 @@ public record VisitContext(String clientIp, String userAgent, boolean bot, Strin
     public boolean countable() {
         return ("GET".equals(httpMethod) || "POST".equals(httpMethod)) && !bot;
     }
+
+    /** Le mot de passe soumis ne doit jamais apparaître dans les logs ni les événements. */
+    @Override
+    public String toString() {
+        return "VisitContext[clientIp=" + clientIp + ", userAgent=" + userAgent + ", bot=" + bot
+                + ", httpMethod=" + httpMethod + ", now=" + now
+                + ", submittedPassword=" + (submittedPassword == null ? "null" : "***")
+                + ", deviceId=" + deviceId + "]";
+    }
 }

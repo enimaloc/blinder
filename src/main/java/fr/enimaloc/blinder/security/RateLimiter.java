@@ -61,6 +61,27 @@ public class RateLimiter {
         }
     }
 
+    /** Réserve atomiquement un essai : {@code false} (sans rien enregistrer) si la clé est bloquée, sinon l'essai est compté. */
+    public synchronized boolean acquire(String key) {
+        if (isBlocked(key)) {
+            return false;
+        }
+        recordFailure(key);
+        return true;
+    }
+
+    /** Annule le dernier essai enregistré pour la clé (no-op si aucun). */
+    public synchronized void release(String key) {
+        Deque<Instant> recent = recent(key);
+        if (recent == null) {
+            return;
+        }
+        recent.removeLast();
+        if (recent.isEmpty()) {
+            failures.remove(key);
+        }
+    }
+
     public synchronized void reset(String key) {
         failures.remove(key);
     }

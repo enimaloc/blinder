@@ -149,4 +149,29 @@ class RateLimiterTest {
     void notBlockedHasZeroRetryAfter() {
         assertThat(limiter.retryAfter("none")).isEqualTo(Duration.ZERO);
     }
+
+    @Test
+    void acquireReservesUntilBlockedThenRefusesWithoutRecording() {
+        assertThat(limiter.acquire("k")).isTrue();
+        assertThat(limiter.acquire("k")).isTrue();
+        assertThat(limiter.acquire("k")).isTrue();
+        assertThat(limiter.isBlocked("k")).isTrue();
+        assertThat(limiter.acquire("k")).isFalse();
+        limiter.release("k");
+        assertThat(limiter.isBlocked("k")).isFalse();
+        assertThat(limiter.acquire("k")).isTrue();
+    }
+
+    @Test
+    void releaseRemovesOnlyTheLastAttempt() {
+        limiter.acquire("k");
+        clock.now = clock.now.plusSeconds(1);
+        limiter.acquire("k");
+        limiter.release("k");
+        limiter.acquire("k");
+        assertThat(limiter.isBlocked("k")).isFalse();
+        limiter.acquire("k");
+        assertThat(limiter.isBlocked("k")).isTrue();
+        limiter.release("none");
+    }
 }
