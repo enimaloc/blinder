@@ -1,10 +1,10 @@
 package fr.enimaloc.blinder.notification;
 
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
-import java.time.Duration;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -18,9 +18,10 @@ import java.util.concurrent.locks.ReentrantLock;
  * Un détenteur du verrou tient toujours une connexion : compatible avec un pool d'une seule connexion (SQLite).
  */
 @Component
+@RequiredArgsConstructor
 public class TriggerLocks {
 
-    static final Duration WAIT = Duration.ofSeconds(30);
+    private final NotificationProperties properties;
 
     private record Key(UUID linkId, TriggerType type) {
     }
@@ -34,7 +35,7 @@ public class TriggerLocks {
 
     /**
      * Prend le verrou de (lien, type) jusqu'à la fin de la transaction courante ; {@code false} si l'attente dépasse
-     * {@link #WAIT} (l'appelant renonce alors pour cette fois). Hors transaction, le verrou est rendu tout de suite :
+     * {@link NotificationProperties#triggerLockWait()} (l'appelant renonce alors pour cette fois). Hors transaction, le verrou est rendu tout de suite :
      * il n'a de sens qu'avec une transaction.
      */
     public boolean acquireForTransaction(UUID linkId, TriggerType type) {
@@ -46,7 +47,7 @@ public class TriggerLocks {
         });
         boolean locked;
         try {
-            locked = entry.lock.tryLock(WAIT.toNanos(), TimeUnit.NANOSECONDS);
+            locked = entry.lock.tryLock(properties.triggerLockWait().toNanos(), TimeUnit.NANOSECONDS);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             locked = false;

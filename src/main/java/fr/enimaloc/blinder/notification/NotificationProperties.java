@@ -10,9 +10,16 @@ import java.time.Duration;
 
 @Validated
 @ConfigurationProperties("blinder.notifications")
+/**
+ * @param mailFrom        expéditeur des e-mails
+ * @param denials         alerte de refus répétés
+ * @param triggerLockWait attente maximale du verrou d'un déclencheur « une seule fois » ; au-delà l'alerte est
+ *                        reportée au passage suivant du scanner périodique
+ */
 public record NotificationProperties(
         @DefaultValue("blinder@localhost") String mailFrom,
-        @DefaultValue @Valid Denials denials) {
+        @DefaultValue @Valid Denials denials,
+        @DefaultValue("2s") Duration triggerLockWait) {
 
     /**
      * @param threshold nombre de refus déclenchant l'alerte

@@ -21,7 +21,7 @@ import static org.mockito.Mockito.doThrow;
 class EmailSenderTest {
 
     final JavaMailSender mail = mock(JavaMailSender.class);
-    final NotificationProperties properties = new NotificationProperties("blinder@example.org", null);
+    final NotificationProperties properties = new NotificationProperties("blinder@example.org", null, null);
 
     @SuppressWarnings("unchecked")
     private EmailSender sender(JavaMailSender mailOrNull) {
