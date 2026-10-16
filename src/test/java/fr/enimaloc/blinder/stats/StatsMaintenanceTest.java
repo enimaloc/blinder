@@ -90,4 +90,15 @@ class StatsMaintenanceTest {
                 .containsExactlyInAnyOrder(pending, recentSent)
                 .doesNotContain(oldSent, oldFailed);
     }
+
+    @Test
+    void purgeRemovesOldVisitsAcrossSeveralBatches() {
+        for (int i = 0; i < 4; i++) {
+            data.visit(link, VisitOutcome.REDIRECTED, NOW.minus(Duration.ofDays(100 + i)), "2.2.2." + i);
+        }
+        // 5 visites anciennes (dont celle du setUp), lots de 2 : 3 passages
+        int removed = maintenance(Duration.ofDays(90)).purgeVisits(NOW.minus(Duration.ofDays(90)), 2);
+        assertThat(removed).isEqualTo(5);
+        assertThat(visits.findAll()).singleElement().satisfies(v -> assertThat(v.getIp()).isEqualTo("1.1.1.2"));
+    }
 }
