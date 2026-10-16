@@ -5,6 +5,7 @@
 <nav th:replace="~{admin/fragments :: nav}"></nav>
 <main>
     <h1>Liens</h1>
+    <p class="notice" th:if="${warning}" th:text="${warning}"></p>
     <p th:if="${domains.isEmpty()}" class="notice">
         Ajoutez d'abord un <a th:href="@{/_/domains/new}">domaine</a>.
     </p>

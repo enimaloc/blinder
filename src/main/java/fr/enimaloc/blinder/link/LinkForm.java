@@ -88,4 +88,15 @@ public class LinkForm {
 
     @Size(max = 2048)
     private String metaImageUrl;
+
+    /** Le formulaire posté déclare-t-il une limite ou une protection (pour l'avertissement d'aperçu) ? */
+    public boolean declaresLimitOrProtection(boolean hasExistingPassword) {
+        return (newPassword != null && !newPassword.isEmpty())
+                || (hasExistingPassword && !removePassword)
+                || (ipAllowlist != null && !ipAllowlist.isBlank())
+                || deviceProtected
+                || (deviceIds != null && !deviceIds.isEmpty())
+                || maxUses != null
+                || ttlMinutes != null;
+    }
 }

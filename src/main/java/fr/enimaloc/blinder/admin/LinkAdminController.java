@@ -17,6 +17,8 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
+import org.springframework.web.servlet.mvc.support.RedirectAttributes;
+import fr.enimaloc.blinder.link.MetaMode;
 import org.springframework.validation.BindingResult;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
@@ -68,17 +70,18 @@ public class LinkAdminController {
     }
 
     @PostMapping("/links")
-    public String create(@Valid @ModelAttribute("form") LinkForm form, BindingResult binding, Model model) {
+    public String create(@Valid @ModelAttribute("form") LinkForm form, BindingResult binding, Model model,
+                         RedirectAttributes flash) {
         User owner = currentUser.require();
         model.addAttribute("domains", domains.list(owner));
         model.addAttribute("devices", deviceService.all(owner));
         model.addAttribute("hasPassword", false);
-        model.addAttribute("limitedOrProtected", false);
+        model.addAttribute("limitedOrProtected", form.declaresLimitOrProtection(false));
         if (binding.hasErrors()) {
             return "admin/links/form";
         }
         try {
-            links.create(owner, form);
+            warnIfExposed(flash, links.create(owner, form));
         } catch (FieldErrorException e) {
             binding.rejectValue(e.field(), "invalid", e.getMessage());
             return "admin/links/form";
@@ -100,14 +103,17 @@ public class LinkAdminController {
 
     @PostMapping("/links/{id}")
     public String update(@PathVariable UUID id, @Valid @ModelAttribute("form") LinkForm form,
-                         BindingResult binding, Model model) {
+                         BindingResult binding, Model model,
+                         RedirectAttributes flash) {
         User owner = currentUser.require();
-        populateEdit(model, owner, links.get(owner, id));
+        Link current = links.get(owner, id);
+        populateEdit(model, owner, current);
+        model.addAttribute("limitedOrProtected", form.declaresLimitOrProtection(current.getPasswordHash() != null));
         if (binding.hasErrors()) {
             return "admin/links/form";
         }
         try {
-            links.update(owner, id, form);
+            warnIfExposed(flash, links.update(owner, id, form));
         } catch (FieldErrorException e) {
             binding.rejectValue(e.field(), "invalid", e.getMessage());
             return "admin/links/form";
@@ -142,7 +148,13 @@ public class LinkAdminController {
         model.addAttribute("devices", deviceService.all(owner));
         model.addAttribute("hasPassword", link.getPasswordHash() != null);
         model.addAttribute("noDeviceLeft", links.hasNoDeviceLeft(link));
-        model.addAttribute("limitedOrProtected", link.getPasswordHash() != null || link.getIpAllowlist() != null
-                || link.isDeviceProtected() || link.getMaxUses() != null || link.getTtlAfterFirstUse() != null);
+        model.addAttribute("limitedOrProtected", LinkService.isLimitedOrProtected(link));
+    }
+
+    private static void warnIfExposed(RedirectAttributes flash, Link saved) {
+        if (saved.getMetaMode() == MetaMode.PASSTHROUGH && LinkService.isLimitedOrProtected(saved)) {
+            flash.addFlashAttribute("warning", "Aperçu repris de la cible sur un lien limité ou protégé : "
+                    + "son titre, sa description et son image sont visibles publiquement.");
+        }
     }
 }

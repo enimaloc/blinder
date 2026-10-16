@@ -24,6 +24,8 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.flash;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.model;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
 
@@ -120,6 +122,40 @@ class LinkRedirectOptionsAdminTest {
         mvc.perform(get("/_/links/{id}", saved.getId()).with(asAdmin))
                 .andExpect(content().string(containsString("value=\"307\" selected")))
                 .andExpect(content().string(containsString("visible par toute personne")))
+                .andExpect(content().string(containsString("Ce lien est limité ou protégé")));
+    }
+
+    @Test
+    void emptyMetaModeOnProtectedLinkIsFieldErrorNotServerError() throws Exception {
+        Link link = new Link(domain, "nm", "https://example.com/nm", admin);
+        link.setMaxUses(2);
+        Link saved = data.save(link);
+        mvc.perform(post("/_/links/{id}", saved.getId()).with(asAdmin).with(csrf())
+                        .param("domainId", domain.getId().toString())
+                        .param("targetUrl", "https://example.com/nm")
+                        .param("metaMode", ""))
+                .andExpect(status().isOk())
+                .andExpect(model().attributeHasFieldErrors("form", "metaMode"));
+    }
+
+    @Test
+    void passthroughOnProtectedLinkFlashesWarning() throws Exception {
+        mvc.perform(create("fw").param("metaMode", "PASSTHROUGH").param("newPassword", "open-sesame"))
+                .andExpect(redirectedUrl("/_/"))
+                .andExpect(flash().attributeExists("warning"));
+    }
+
+    @Test
+    void passthroughOnBareLinkDoesNotFlash() throws Exception {
+        mvc.perform(create("fb").param("metaMode", "PASSTHROUGH"))
+                .andExpect(redirectedUrl("/_/"))
+                .andExpect(flash().attributeCount(0));
+    }
+
+    @Test
+    void rerenderedCreateFormWarnsFromPostedValues() throws Exception {
+        mvc.perform(create("fe").param("metaMode", "PASSTHROUGH").param("maxUses", "3")
+                        .param("interstitialSeconds", "99"))
                 .andExpect(content().string(containsString("Ce lien est limité ou protégé")));
     }
 }

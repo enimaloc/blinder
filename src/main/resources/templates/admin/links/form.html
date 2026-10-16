@@ -81,7 +81,7 @@
                 <option value="PASSTHROUGH">Repris de la cible</option>
             </select>
             <p class="notice">« Repris de la cible » : l'aperçu de la cible (titre, description, image — donc son domaine) sera visible par toute personne ou tout bot qui ouvre ce lien, même sans y avoir accès.</p>
-            <p class="error" th:if="${limitedOrProtected and form.metaMode.name() == 'PASSTHROUGH'}">Ce lien est limité ou protégé : son aperçu repris de la cible est pourtant visible publiquement.</p>
+            <p class="notice" th:if="${limitedOrProtected and form.metaMode != null and form.metaMode.name() == 'PASSTHROUGH'}">Ce lien est limité ou protégé : son aperçu repris de la cible est pourtant visible publiquement.</p>
             <label for="metaTitle">Titre (personnalisé)</label>
             <input id="metaTitle" th:field="*{metaTitle}" maxlength="200">
             <p class="error" th:errors="*{metaTitle}"></p>

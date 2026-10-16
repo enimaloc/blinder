@@ -71,6 +71,12 @@ public class LinkService {
         return link.isDeviceProtected() && links.findDeviceIds(link.getId()).isEmpty();
     }
 
+    public static boolean isLimitedOrProtected(Link link) {
+        return link.getPasswordHash() != null
+                || (link.getIpAllowlist() != null && !link.getIpAllowlist().isBlank())
+                || link.isDeviceProtected() || link.getMaxUses() != null || link.getTtlAfterFirstUse() != null;
+    }
+
     /** {@code link.domain} doit être chargé (les finders de {@link #get} l'assurent). */
     public LinkForm toForm(Link link) {
         LinkForm form = new LinkForm();
