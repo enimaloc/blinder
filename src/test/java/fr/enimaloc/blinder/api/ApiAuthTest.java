@@ -143,8 +143,10 @@ class ApiAuthTest {
 
     @Test
     void postWithTokenNeedsNoCsrf() throws Exception {
-        MvcResult result = mvc.perform(bearer(from(post(DOMAINS), "10.9.0.8"), token)).andReturn();
-        assertThat(result.getResponse().getStatus()).isNotIn(401, 403);
+        // Sans CSRF : on atteint le routage (POST non mappé sur /domains) au lieu d'un 403 de la protection CSRF.
+        mvc.perform(bearer(from(post(DOMAINS), "10.9.0.8"), token))
+                .andExpect(status().isMethodNotAllowed())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON));
     }
 
     @Test
