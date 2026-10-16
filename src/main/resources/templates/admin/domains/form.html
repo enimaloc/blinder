@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="fr" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{admin/fragments :: head(${domainId == null} ? 'Nouveau domaine' : 'Modifier le domaine')}"></head>
+<body>
+<nav th:replace="~{admin/fragments :: nav}"></nav>
+<main>
+    <h1 th:text="${domainId == null} ? 'Nouveau domaine' : 'Modifier le domaine'"></h1>
+    <p class="error" th:if="${staleError}">Ce domaine a été modifié entre-temps, rechargez la page.</p>
+    <form th:object="${form}" method="post"
+          th:action="${domainId == null} ? @{/_/domains} : @{/_/domains/{id}(id=${domainId})}">
+        <input type="hidden" th:field="*{version}">
+        <label for="host">Domaine</label>
+        <input id="host" th:field="*{host}" required>
+        <p class="error" th:errors="*{host}"></p>
+        <label><input type="checkbox" th:field="*{enabled}"> Actif</label>
+        <label for="notFoundUrl">Redirection si slug inconnu (vide = 404)</label>
+        <input id="notFoundUrl" type="url" th:field="*{notFoundUrl}">
+        <p class="error" th:errors="*{notFoundUrl}"></p>
+        <p><button type="submit">Enregistrer</button></p>
+    </form>
+</main>
+</body>
+</html>

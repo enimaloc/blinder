@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="fr" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{admin/fragments :: head('Domaines')}"></head>
+<body>
+<nav th:replace="~{admin/fragments :: nav}"></nav>
+<main>
+    <h1>Domaines</h1>
+    <p class="error" th:if="${error}" th:text="${error}"></p>
+    <p><a th:href="@{/_/domains/new}">Ajouter un domaine</a></p>
+    <table>
+        <tr><th>Domaine</th><th>État</th><th>Slug inconnu</th><th></th></tr>
+        <tr th:each="d : ${domains}">
+            <td><a th:href="@{/_/domains/{id}(id=${d.id})}" th:text="${d.host}"></a></td>
+            <td th:text="${d.enabled} ? 'Actif' : 'Désactivé'"></td>
+            <td th:text="${d.notFoundUrl} ?: '404'"></td>
+            <td>
+                <form class="inline" th:action="@{/_/domains/{id}/delete(id=${d.id})}" method="post">
+                    <button class="danger" type="submit">Supprimer</button>
+                </form>
+            </td>
+        </tr>
+    </table>
+</main>
+</body>
+</html>
