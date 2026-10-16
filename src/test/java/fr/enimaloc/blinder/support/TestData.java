@@ -14,6 +14,16 @@ import fr.enimaloc.blinder.link.LinkRepository;
 import fr.enimaloc.blinder.link.preview.LinkPreview;
 import fr.enimaloc.blinder.link.preview.LinkPreviewRepository;
 import fr.enimaloc.blinder.link.preview.PreviewStatus;
+import fr.enimaloc.blinder.notification.ChannelType;
+import fr.enimaloc.blinder.notification.FiredTriggerRepository;
+import fr.enimaloc.blinder.notification.LinkNotificationSettingsRepository;
+import fr.enimaloc.blinder.notification.NotificationChannel;
+import fr.enimaloc.blinder.notification.NotificationChannelRepository;
+import fr.enimaloc.blinder.notification.NotificationDeliveryRepository;
+import fr.enimaloc.blinder.stats.Visit;
+import fr.enimaloc.blinder.stats.VisitDailyStatRepository;
+import fr.enimaloc.blinder.stats.VisitOutcome;
+import fr.enimaloc.blinder.stats.VisitRepository;
 import fr.enimaloc.blinder.user.Role;
 import fr.enimaloc.blinder.user.User;
 import fr.enimaloc.blinder.user.UserRepository;
@@ -36,9 +46,22 @@ public class TestData {
     private final DeviceCredentialRepository deviceCredentials;
     private final DeviceEnrollmentRepository deviceEnrollments;
     private final LinkPreviewRepository linkPreviews;
+    private final VisitRepository visits;
+    private final VisitDailyStatRepository dailyStats;
+    private final NotificationChannelRepository channels;
+    private final LinkNotificationSettingsRepository notificationSettings;
+    private final FiredTriggerRepository firedTriggers;
+    private final NotificationDeliveryRepository deliveries;
     private final TransactionTemplate transactions;
 
     public void reset() {
+        deliveries.deleteAllInBatch();
+        firedTriggers.deleteAllInBatch();
+        // deleteAll() (et non InBatch) : charge les entités pour vider la table de jointure des canaux.
+        notificationSettings.deleteAll();
+        channels.deleteAllInBatch();
+        dailyStats.deleteAllInBatch();
+        visits.deleteAllInBatch();
         linkPreviews.deleteAllInBatch();
         deviceCredentials.deleteAllInBatch();
         deviceEnrollments.deleteAllInBatch();
@@ -98,5 +121,15 @@ public class TestData {
         preview.setStatus(status);
         preview.setFetchedAt(Instant.now());
         return linkPreviews.saveAndFlush(preview);
+    }
+
+    public Visit visit(Link link, VisitOutcome outcome, Instant occurredAt, String ip) {
+        Link managed = links.getReferenceById(link.getId());
+        return visits.saveAndFlush(new Visit(managed, link.getOwner(), occurredAt, outcome, null, "GET", false, ip,
+                "Mozilla/5.0 (Windows NT 10.0) Chrome/120.0", "Chrome", "Windows", null, null, null, null));
+    }
+
+    public NotificationChannel channel(User owner, String name, ChannelType type, String target) {
+        return channels.saveAndFlush(new NotificationChannel(owner, name, type, target));
     }
 }
