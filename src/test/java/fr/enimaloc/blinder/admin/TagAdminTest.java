@@ -240,4 +240,33 @@ class TagAdminTest {
         mvc.perform(get("/_/tags").with(asAdmin)).andExpect(content().string(containsString("href=\"/_/tags\"")));
         mvc.perform(get("/_/tags")).andExpect(status().is3xxRedirection());
     }
+
+    @Test
+    void pillsCarryTheirColourAndAReadableTextColour() throws Exception {
+        Tag light = data.tag(admin, "clair");
+        light.setColor("#ffff00");
+        tags.save(light);
+        Tag dark = data.tag(admin, "sombre");
+        dark.setColor("#112233");
+        tags.save(dark);
+        Link link = data.link(domain, "pil", "https://example.com");
+        data.tagLink(link, light);
+        data.tagLink(link, dark);
+        mvc.perform(get("/_/").with(asAdmin))
+                .andExpect(content().string(containsString("--tag-color: #ffff00; --tag-text: #000")))
+                .andExpect(content().string(containsString("--tag-color: #112233; --tag-text: #fff")));
+        mvc.perform(get("/_/tags").with(asAdmin))
+                .andExpect(content().string(containsString("--tag-color: #ffff00; --tag-text: #000")));
+    }
+
+    @Test
+    void pillFilterLinksOmitTheDomainParameterWhenNoDomainIsSelected() throws Exception {
+        Tag promo = data.tag(admin, "promo");
+        data.tagLink(data.link(domain, "pf", "https://example.com"), promo);
+        mvc.perform(get("/_/").with(asAdmin))
+                .andExpect(content().string(containsString("href=\"/_/?tag=" + promo.getId() + "\"")))
+                .andExpect(content().string(not(containsString("domain="))));
+        mvc.perform(get("/_/").param("domain", domain.getId().toString()).with(asAdmin))
+                .andExpect(content().string(containsString("tag=" + promo.getId() + "&amp;domain=" + domain.getId())));
+    }
 }
