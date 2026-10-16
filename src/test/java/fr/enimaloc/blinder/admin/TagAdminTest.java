@@ -269,4 +269,18 @@ class TagAdminTest {
         mvc.perform(get("/_/").param("domain", domain.getId().toString()).with(asAdmin))
                 .andExpect(content().string(containsString("tag=" + promo.getId() + "&amp;domain=" + domain.getId())));
     }
+
+    @Test
+    void overlongTagNamesAreReportedAsTooLongNotInvalid() throws Exception {
+        for (int length : new int[]{41, 300}) {
+            mvc.perform(post("/_/tags").with(asAdmin).with(csrf()).param("name", "a".repeat(length)).param("noColor", "true"))
+                    .andExpect(status().isOk())
+                    .andExpect(content().string(containsString("40 caractères maximum")))
+                    .andExpect(content().string(not(containsString("Valeur invalide"))));
+        }
+        Tag t = data.tag(admin, "ok");
+        mvc.perform(post("/_/tags/{id}", t.getId()).with(asAdmin).with(csrf()).param("name", "a".repeat(300)).param("noColor", "true"))
+                .andExpect(content().string(containsString("40 caractères maximum")));
+        assertThat(tags.findAll()).hasSize(1);
+    }
 }

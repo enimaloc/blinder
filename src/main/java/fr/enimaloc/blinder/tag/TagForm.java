@@ -6,7 +6,7 @@ import lombok.Data;
 @Data
 public class TagForm {
 
-    @Size(max = 200)
+    /** Longueur contrôlée par {@code TagNames.validate} (message « 40 caractères maximum »). */
     private String name;
 
     @Size(max = 20)
