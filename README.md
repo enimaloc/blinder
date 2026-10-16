@@ -111,6 +111,9 @@ blinder.notifications.mail-from=blinder@example.com
 
 Sans `spring.mail.host`, les envois e-mail échouent avec « SMTP non configuré ».
 
+Les connexions SMTP sont limitées à 5 s (connexion, lecture, écriture) et les tâches
+planifiées s'exécutent sur un pool de 3 threads (`spring.task.scheduling.pool.size`).
+
 ### Webhooks
 
 Requête `POST` JSON (`User-Agent: BlinderWebhook/1.0`, succès = 2xx, pas de
@@ -121,6 +124,12 @@ redirection suivie, délai de 5 s). En-têtes :
 - `X-Blinder-Timestamp` : secondes depuis l'epoch ;
 - `X-Blinder-Signature` : `sha256=` + HMAC-SHA256 hexadécimal de
   `<timestamp>.<corps>` avec le secret du canal (affiché dans le formulaire du canal).
+
+Livraison au moins une fois : dédupliquer sur `X-Blinder-Delivery`.
+
+Limites connues : le temps de résolution DNS n'est pas couvert par le délai de 5 s ;
+des visites peuvent être perdues si la file déborde (compteur affiché dans les
+statistiques) ; un lien supprimé en cours de lot fait perdre les visites de ce lot.
 
 Vérification en shell (`BODY` = corps brut reçu) :
 
