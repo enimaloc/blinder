@@ -27,6 +27,7 @@ import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.servlet.ModelAndView;
 import org.springframework.web.servlet.view.RedirectView;
 
+import java.net.URI;
 import java.time.Duration;
 import java.util.Optional;
 
@@ -86,6 +87,10 @@ public class RedirectController {
             }
         }
 
+        if (decision instanceof Allow && context.countable() && showsInterstitial(link, context)) {
+            return interstitial(request, link);
+        }
+
         boolean counted = false;
         if (decision instanceof Allow && context.countable()) {
             counted = usageCounter.consume(link, context.now());
@@ -106,6 +111,23 @@ public class RedirectController {
             }
             case Challenge challenge -> passwordPage(request, challenge.rejected());
         };
+    }
+
+    /** Page intermédiaire : GET comptable, lien sans mot de passe (le formulaire de mot de passe confirme déjà). */
+    private static boolean showsInterstitial(Link link, VisitContext context) {
+        return link.isInterstitial() && link.getPasswordHash() == null && "GET".equals(context.httpMethod());
+    }
+
+    /** N'affiche l'URL complète que si le lien n'a pas de limite d'usage (sinon elle contournerait le compteur). */
+    private static ModelAndView interstitial(HttpServletRequest request, Link link) {
+        String query = request.getQueryString();
+        ModelAndView mv = new ModelAndView("public/interstitial");
+        mv.addObject("action", request.getRequestURI() + (query == null ? "" : "?" + query));
+        mv.addObject("targetHost", URI.create(link.getTargetUrl()).getHost());
+        mv.addObject("targetUrl", hasUsageLimits(link) ? null : link.getTargetUrl());
+        mv.addObject("seconds", link.getInterstitialSeconds());
+        mv.setStatus(HttpStatus.OK);
+        return mv;
     }
 
     private ModelAndView denied(Domain domain, Link link, DenyReason reason) {

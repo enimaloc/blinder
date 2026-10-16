@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="fr" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="robots" content="noindex">
+    <title>Redirection</title>
+</head>
+<body>
+<main>
+    <h1>Vous allez être redirigé</h1>
+    <p>Destination : <strong th:text="${targetHost}">exemple.org</strong></p>
+    <p th:if="${targetUrl != null}"><code th:text="${targetUrl}">https://exemple.org/</code></p>
+    <form id="continue" method="post" th:action="${action}">
+        <button type="submit">Continuer</button>
+    </form>
+    <th:block th:if="${seconds > 0}">
+        <p>Redirection automatique dans <span id="countdown" th:text="${seconds}">5</span> s.</p>
+        <script th:inline="javascript">
+            (function () {
+                var remaining = /*[[${seconds}]]*/ 5;
+                var label = document.getElementById('countdown');
+                var timer = setInterval(function () {
+                    remaining -= 1;
+                    label.textContent = remaining;
+                    if (remaining <= 0) {
+                        clearInterval(timer);
+                        document.getElementById('continue').submit();
+                    }
+                }, 1000);
+            })();
+        </script>
+    </th:block>
+</main>
+</body>
+</html>
