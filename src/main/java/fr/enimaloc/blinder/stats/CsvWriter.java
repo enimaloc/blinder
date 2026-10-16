@@ -48,7 +48,8 @@ public final class CsvWriter {
         }
         for (int i = 0; i < v.length(); i++) {
             char c = v.charAt(i);
-            if (Character.isWhitespace(c) || Character.isSpaceChar(c) || Character.isISOControl(c)) {
+            if (Character.isWhitespace(c) || Character.isSpaceChar(c) || Character.isISOControl(c)
+                    || Character.getType(c) == Character.FORMAT) {
                 continue;
             }
             return "=+-@\uFF1D\uFF0B\uFF0D\uFF20".indexOf(c) >= 0;

@@ -19,7 +19,7 @@ public final class UserAgentClassifier {
     }
 
     private static String browser(String ua) {
-        if (ua.contains("Edg/")) {
+        if (ua.contains("Edg/") || ua.contains("EdgA/") || ua.contains("EdgiOS/")) {
             return "Edge";
         }
         if (ua.contains("OPR/") || ua.contains("Opera")) {

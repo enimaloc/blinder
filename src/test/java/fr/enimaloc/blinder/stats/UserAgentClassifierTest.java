@@ -29,6 +29,14 @@ class UserAgentClassifierTest {
     }
 
     @Test
+    void edgeOnAndroidAndIos() {
+        assertThat(of("Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36 EdgA/126.0.0.0"))
+                .isEqualTo(new UserAgentClassifier.Result("Edge", "Android"));
+        assertThat(of("Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 EdgiOS/126.0.0.0 Mobile/15E148 Safari/605.1.15"))
+                .isEqualTo(new UserAgentClassifier.Result("Edge", "iOS"));
+    }
+
+    @Test
     void edgeOnWindows() {
         assertThat(of("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36 Edg/126.0.0.0"))
                 .isEqualTo(new UserAgentClassifier.Result("Edge", "Windows"));

@@ -11,7 +11,7 @@ import java.nio.file.Path;
 @Configuration(proxyBeanMethods = false)
 public class GeoConfig {
 
-    @Bean(destroyMethod = "")
+    @Bean
     public GeoLocator geoLocator(GeoIpProperties properties) {
         Path database = properties.database();
         if (database == null) {

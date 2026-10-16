@@ -42,6 +42,14 @@ class CsvWriterTest {
     }
 
     @Test
+    void neutralisesFormulasHiddenBehindInvisibleFormatCharacters() {
+        assertThat(CsvWriter.cell("\u200B=1+1")).isEqualTo("'\u200B=1+1");
+        assertThat(CsvWriter.cell("\uFEFF@SUM(A1)")).isEqualTo("'\uFEFF@SUM(A1)");
+        assertThat(CsvWriter.cell("\u2060-5")).isEqualTo("'\u2060-5");
+        assertThat(CsvWriter.cell("\u200Bplain")).isEqualTo("\u200Bplain");
+    }
+
+    @Test
     void nullIsEmpty() {
         assertThat(CsvWriter.cell(null)).isEmpty();
     }

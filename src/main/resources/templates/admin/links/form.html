@@ -83,7 +83,7 @@
             <input id="notifyThreshold" type="number" min="1" th:field="*{notifyThreshold}">
             <p class="error" th:errors="*{notifyThreshold}"></p>
             <label th:each="c : ${channels}">
-                <input type="checkbox" th:field="*{notifyChannelIds}" th:value="${c.id}"> <span th:text="${c.name}"></span>
+                <input type="checkbox" th:field="*{notifyChannelIds}" th:value="${c.id}"> <span th:text="${c.enabled} ? ${c.name} : ${c.name} + ' (désactivé)'"></span>
             </label>
             <p class="error" th:errors="*{notifyChannelIds}"></p>
         </fieldset>

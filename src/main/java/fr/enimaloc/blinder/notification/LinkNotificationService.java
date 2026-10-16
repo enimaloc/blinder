@@ -73,6 +73,7 @@ public class LinkNotificationService {
     @Transactional(readOnly = true)
     public void preselect(User owner, LinkForm form) {
         form.setNotifyChannelIds(channels.findByOwnerAndPreselectedTrue(owner).stream()
+                .filter(NotificationChannel::isEnabled)
                 .map(NotificationChannel::getId).collect(Collectors.toCollection(LinkedHashSet::new)));
         form.setNotifyExhausted(true);
         form.setNotifyExpired(true);
