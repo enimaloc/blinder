@@ -180,6 +180,14 @@ class StatsAdminTest {
     }
 
     @Test
+    void webjarsAreNotServedPubliclyButTheAdminVendorPathIs() throws Exception {
+        String asset = "chart.js/4.5.1/dist/chart.umd.js";
+        mvc.perform(get("/webjars/" + asset).with(login(admin))).andExpect(status().isNotFound());
+        mvc.perform(get("/webjars/" + asset).with(login(admin))).andExpect(status().isNotFound());
+        mvc.perform(get("/_/vendor/" + asset).with(login(admin))).andExpect(status().isOk());
+    }
+
+    @Test
     void foreignOrUnknownTagIs404() throws Exception {
         fr.enimaloc.blinder.tag.Tag theirs = data.tag(data.admin("other"), "promo");
         mvc.perform(get("/_/stats").param("tag", theirs.getId().toString()).with(login(admin)))
