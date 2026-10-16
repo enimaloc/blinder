@@ -108,6 +108,18 @@ class LinkPreviewAdminTest {
     }
 
     @Test
+    void editPageShowsWhenThePreviewWasFetched() throws Exception {
+        Link link = new Link(domain, "when", "https://dest.example.org/", admin);
+        link.setMetaMode(MetaMode.PASSTHROUGH);
+        Link saved = data.save(link);
+        var preview = data.preview(saved, "Titre", null, null, PreviewStatus.OK);
+        String expected = java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm")
+                .format(preview.getFetchedAt().atZone(java.time.ZoneId.of("UTC")));
+        mvc.perform(get("/_/links/{id}", saved.getId()).with(asAdmin))
+                .andExpect(content().string(containsString("le " + expected)));
+    }
+
+    @Test
     void otherModesNeverFetch() throws Exception {
         mvc.perform(post("/_/links").with(asAdmin).with(csrf())
                         .param("domainId", domain.getId().toString()).param("slug", "n")

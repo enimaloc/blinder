@@ -1,6 +1,7 @@
 package fr.enimaloc.blinder.admin;
 
 import fr.enimaloc.blinder.access.LinkStatusResolver;
+import fr.enimaloc.blinder.common.BlinderProperties;
 import fr.enimaloc.blinder.common.FieldErrorException;
 import fr.enimaloc.blinder.device.DeviceService;
 import fr.enimaloc.blinder.domain.Domain;
@@ -29,6 +30,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.UUID;
 
@@ -38,12 +40,15 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class LinkAdminController {
 
+    private static final DateTimeFormatter PREVIEW_DATE = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
+
     private final CurrentUser currentUser;
     private final LinkService links;
     private final DomainService domains;
     private final LinkStatusResolver statuses;
     private final DeviceService deviceService;
     private final LinkPreviewService previews;
+    private final BlinderProperties properties;
 
     @GetMapping("/")
     public String list(@RequestParam(name = "domain", required = false) UUID domainId, Model model) {
@@ -168,7 +173,10 @@ public class LinkAdminController {
         model.addAttribute("hasPassword", link.getPasswordHash() != null);
         model.addAttribute("noDeviceLeft", links.hasNoDeviceLeft(link));
         model.addAttribute("limitedOrProtected", LinkService.isLimitedOrProtected(link));
-        model.addAttribute("preview", previews.current(link.getId()).orElse(null));
+        var preview = previews.current(link.getId()).orElse(null);
+        model.addAttribute("preview", preview);
+        model.addAttribute("previewFetchedAt", preview == null || preview.getFetchedAt() == null ? null
+                : PREVIEW_DATE.format(preview.getFetchedAt().atZone(properties.admin().timeZone())));
     }
 
     /** Le lien est déjà enregistré : un échec de l'aperçu ne doit jamais faire échouer l'enregistrement. */

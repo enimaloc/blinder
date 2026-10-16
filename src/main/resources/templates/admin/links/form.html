@@ -94,6 +94,7 @@
             <p class="notice" th:if="${preview != null}">
                 Dernier aperçu repris :
                 <strong th:text="${preview.status.name() == 'OK'} ? 'réussi' : 'échec'">réussi</strong>
+                <span th:if="${previewFetchedAt != null}" th:text="'le ' + ${previewFetchedAt}"></span>
                 — <span th:text="${preview.title} ?: '(sans titre)'"></span>
             </p>
         </fieldset>
