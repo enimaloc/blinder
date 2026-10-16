@@ -4,6 +4,7 @@ import fr.enimaloc.blinder.common.BaseEntity;
 import fr.enimaloc.blinder.common.DurationSecondsConverter;
 import fr.enimaloc.blinder.device.Device;
 import fr.enimaloc.blinder.domain.Domain;
+import fr.enimaloc.blinder.tag.Tag;
 import fr.enimaloc.blinder.user.User;
 import jakarta.persistence.Column;
 import jakarta.persistence.Convert;
@@ -25,6 +26,7 @@ import org.hibernate.annotations.OptimisticLock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.Set;
 
 @Entity
@@ -92,6 +94,12 @@ public class Link extends BaseEntity {
             joinColumns = @JoinColumn(name = "link_id"),
             inverseJoinColumns = @JoinColumn(name = "device_id"))
     private Set<Device> devices = new HashSet<>();
+
+    @ManyToMany
+    @JoinTable(name = "link_tags",
+            joinColumns = @JoinColumn(name = "link_id"),
+            inverseJoinColumns = @JoinColumn(name = "tag_id"))
+    private Set<Tag> tags = new LinkedHashSet<>();
 
     @Column(nullable = false)
     private int redirectStatus = 302;

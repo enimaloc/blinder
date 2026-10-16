@@ -1,5 +1,7 @@
 package fr.enimaloc.blinder.support;
 
+import fr.enimaloc.blinder.api.token.ApiToken;
+import fr.enimaloc.blinder.api.token.ApiTokenRepository;
 import fr.enimaloc.blinder.device.Device;
 import fr.enimaloc.blinder.device.DeviceCredential;
 import fr.enimaloc.blinder.device.DeviceCredentialRepository;
@@ -21,6 +23,8 @@ import fr.enimaloc.blinder.notification.NotificationChannel;
 import fr.enimaloc.blinder.notification.NotificationChannelRepository;
 import fr.enimaloc.blinder.notification.NotificationDeliveryRepository;
 import fr.enimaloc.blinder.stats.Visit;
+import fr.enimaloc.blinder.tag.Tag;
+import fr.enimaloc.blinder.tag.TagRepository;
 import fr.enimaloc.blinder.stats.VisitDailyStatRepository;
 import fr.enimaloc.blinder.stats.VisitOutcome;
 import fr.enimaloc.blinder.stats.VisitRepository;
@@ -53,6 +57,8 @@ public class TestData {
     private final LinkNotificationSettingsRepository notificationSettings;
     private final FiredTriggerRepository firedTriggers;
     private final NotificationDeliveryRepository deliveries;
+    private final TagRepository tags;
+    private final ApiTokenRepository apiTokens;
     private final TransactionTemplate transactions;
     private final VisitWriter visitWriter;
 
@@ -68,7 +74,10 @@ public class TestData {
         linkPreviews.deleteAllInBatch();
         deviceCredentials.deleteAllInBatch();
         deviceEnrollments.deleteAllInBatch();
-        links.deleteAllInBatch();
+        apiTokens.deleteAllInBatch();
+        // deleteAll() : charge les liens pour vider link_tags avant les tags.
+        links.deleteAll();
+        tags.deleteAllInBatch();
         devices.deleteAllInBatch();
         domains.deleteAllInBatch();
         users.deleteAllInBatch();
@@ -88,6 +97,24 @@ public class TestData {
 
     public Link save(Link link) {
         return links.save(link);
+    }
+
+    public Tag tag(User owner, String name) {
+        return tags.save(new Tag(owner, name));
+    }
+
+    public void tagLink(Link link, Tag tag) {
+        transactions.executeWithoutResult(status -> {
+            Link managed = links.findById(link.getId()).orElseThrow();
+            managed.getTags().add(tags.getReferenceById(tag.getId()));
+        });
+    }
+
+    /** Crée un jeton d'API et renvoie le jeton brut {@code bl_...}. */
+    public String apiToken(User owner, String name) {
+        String raw = "bl_" + DeviceTokens.newToken();
+        apiTokens.save(new ApiToken(owner, name, raw.substring(0, 10), DeviceTokens.sha256(raw)));
+        return raw;
     }
 
     public Device device(User owner, String name) {

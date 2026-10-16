@@ -1,5 +1,7 @@
 package fr.enimaloc.blinder.persistence;
 
+import fr.enimaloc.blinder.api.token.ApiToken;
+import fr.enimaloc.blinder.api.token.ApiTokenRepository;
 import fr.enimaloc.blinder.device.Device;
 import fr.enimaloc.blinder.device.DeviceCredentialRepository;
 import fr.enimaloc.blinder.device.DeviceEnrollmentRepository;
@@ -31,6 +33,8 @@ import fr.enimaloc.blinder.stats.VisitDailyStatRepository;
 import fr.enimaloc.blinder.stats.VisitOutcome;
 import fr.enimaloc.blinder.stats.VisitRepository;
 import fr.enimaloc.blinder.support.TestData;
+import fr.enimaloc.blinder.tag.Tag;
+import fr.enimaloc.blinder.tag.TagRepository;
 import fr.enimaloc.blinder.user.User;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -93,6 +97,11 @@ abstract class AbstractPersistenceTest {
     FiredTriggerRepository firedTriggers;
     @Autowired
     NotificationDeliveryRepository deliveries;
+
+    @Autowired
+    TagRepository tags;
+    @Autowired
+    ApiTokenRepository apiTokens;
 
     @Autowired
     fr.enimaloc.blinder.stats.StatsQuery statsQuery;
@@ -562,5 +571,104 @@ abstract class AbstractPersistenceTest {
         StringWriter csv = new StringWriter();
         statsQuery.exportCsv(owner, null, period, csv);
         assertThat(csv.toString().split("\r\n")).hasSize(3);
+    }
+
+    @Test
+    void persistsTagWithColor() {
+        Tag tag = new Tag(owner, "Promo Été");
+        tag.setColor("#ff8800");
+        tags.saveAndFlush(tag);
+
+        Tag found = tags.findById(tag.getId()).orElseThrow();
+        assertThat(found.getName()).isEqualTo("Promo Été");
+        assertThat(found.getNameKey()).isEqualTo("promo été");
+        assertThat(found.getColor()).isEqualTo("#ff8800");
+        assertThat(tags.findByOwnerAndNameKey(owner, "promo été")).isPresent();
+        assertThat(tags.findByIdAndOwner(tag.getId(), owner)).isPresent();
+        assertThat(tags.findByOwnerOrderByNameKeyAsc(owner)).hasSize(1);
+    }
+
+    @Test
+    void tagNameKeyIsUniquePerOwner() {
+        User other = data.admin("other");
+        data.tag(owner, "Promo");
+
+        assertThatThrownBy(() -> tags.saveAndFlush(new Tag(owner, "PROMO")))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        assertThat(tags.saveAndFlush(new Tag(other, "PROMO"))).isNotNull();
+        assertThat(tags.findByOwnerAndNameKeyIn(owner, List.of("promo", "x"))).hasSize(1);
+    }
+
+    @Test
+    void linkKeepsItsTags() {
+        Link link = data.link(domain, "tagged", "https://example.com");
+        Tag a = data.tag(owner, "a");
+        Tag b = data.tag(owner, "b");
+        data.tagLink(link, a);
+        data.tagLink(link, b);
+
+        new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
+            Link found = links.findById(link.getId()).orElseThrow();
+            assertThat(found.getTags()).extracting(Tag::getName).containsExactlyInAnyOrder("a", "b");
+        });
+        var counts = tags.countLinksByTag(owner);
+        assertThat(counts).hasSize(2);
+        assertThat(((Number) counts.get(0)[1]).longValue()).isEqualTo(1L);
+    }
+
+    @Test
+    void deletingLinkRemovesJoinRowsButKeepsTags() {
+        Link link = data.link(domain, "tagged", "https://example.com");
+        Tag a = data.tag(owner, "a");
+        data.tagLink(link, a);
+
+        links.deleteById(link.getId());
+        links.flush();
+
+        assertThat(tags.findById(a.getId())).isPresent();
+        assertThat(tags.countLinksByTag(owner)).isEmpty();
+    }
+
+    @Test
+    void deletingTagKeepsLinkWithoutIt() {
+        Link link = data.link(domain, "tagged", "https://example.com");
+        Tag a = data.tag(owner, "a");
+        Tag b = data.tag(owner, "b");
+        data.tagLink(link, a);
+        data.tagLink(link, b);
+
+        tags.deleteById(a.getId());
+        tags.flush();
+
+        new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
+            Link found = links.findById(link.getId()).orElseThrow();
+            assertThat(found.getTags()).extracting(Tag::getName).containsExactly("b");
+        });
+    }
+
+    @Test
+    void findsApiTokenByHashWithOwner() {
+        String raw = data.apiToken(owner, "ci");
+
+        ApiToken found = apiTokens.findByTokenHash(DeviceTokens.sha256(raw)).orElseThrow();
+        assertThat(found.getOwner().getUsername()).isEqualTo("admin");
+        assertThat(found.getName()).isEqualTo("ci");
+        assertThat(found.getTokenPrefix()).isEqualTo(raw.substring(0, 10));
+        assertThat(found.getLastUsedAt()).isNull();
+        assertThat(apiTokens.findByOwnerOrderByCreatedAtDesc(owner)).hasSize(1);
+        assertThat(apiTokens.findByIdAndOwner(found.getId(), owner)).isPresent();
+        assertThat(apiTokens.findByTokenHash("nope")).isEmpty();
+    }
+
+    @Test
+    void touchUpdatesLastUsedOnlyOncePerWindow() {
+        String raw = data.apiToken(owner, "ci");
+        ApiToken token = apiTokens.findByTokenHash(DeviceTokens.sha256(raw)).orElseThrow();
+        Instant now = Instant.now().truncatedTo(ChronoUnit.SECONDS);
+
+        assertThat(apiTokens.touch(token.getId(), now, now.minusSeconds(60))).isEqualTo(1);
+        assertThat(apiTokens.touch(token.getId(), now.plusSeconds(10), now.minusSeconds(50))).isZero();
+        assertThat(apiTokens.touch(token.getId(), now.plusSeconds(120), now.plusSeconds(60))).isEqualTo(1);
+        assertThat(apiTokens.findById(token.getId()).orElseThrow().getLastUsedAt()).isEqualTo(now.plusSeconds(120));
     }
 }
