@@ -101,6 +101,31 @@ class SetupFlowTest {
     }
 
     @Test
+    void missingPasswordIsAFieldErrorNotAServerError() throws Exception {
+        mvc.perform(post("http://go.example.com/_/setup").with(csrf())
+                        .param("token", token).param("username", "admin").param("host", "go.example.com"))
+                .andExpect(status().isOk())
+                .andExpect(model().attributeHasFieldErrors("form", "password"));
+        assertThat(users.count()).isZero();
+    }
+
+    @Test
+    void passwordOverSeventyTwoBytesIsAFieldError() throws Exception {
+        String tooLong = "é".repeat(37);
+        mvc.perform(submit(token, tooLong, tooLong))
+                .andExpect(status().isOk())
+                .andExpect(model().attributeHasFieldErrors("form", "password"));
+        assertThat(users.count()).isZero();
+    }
+
+    @Test
+    void seventyTwoBytePasswordSucceeds() throws Exception {
+        String max = "a".repeat(72);
+        mvc.perform(submit(token, max, max)).andExpect(redirectedUrl("/_/login?setup"));
+        assertThat(users.count()).isEqualTo(1);
+    }
+
+    @Test
     void notPendingWhenUsersExist() {
         data.admin("someone");
         assertThat(guard.isSetupPending()).isFalse();

@@ -14,6 +14,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.nio.charset.StandardCharsets;
+import java.util.Objects;
+
 @Service
 @RequiredArgsConstructor
 public class SetupService {
@@ -32,7 +35,10 @@ public class SetupService {
         if (!guard.tokenMatches(form.getToken())) {
             throw new FieldErrorException("token", "Jeton invalide");
         }
-        if (!form.getPassword().equals(form.getPasswordConfirm())) {
+        if (form.getPassword().getBytes(StandardCharsets.UTF_8).length > 72) {
+            throw new FieldErrorException("password", "72 octets maximum");
+        }
+        if (!Objects.equals(form.getPassword(), form.getPasswordConfirm())) {
             throw new FieldErrorException("passwordConfirm", "Les mots de passe ne correspondent pas");
         }
         String host = HostNormalizer.normalize(form.getHost());

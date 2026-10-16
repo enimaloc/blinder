@@ -3,8 +3,10 @@ package fr.enimaloc.blinder.setup;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
+import lombok.ToString;
 
 @Data
+@ToString(exclude = {"token", "password", "passwordConfirm"})
 public class SetupForm {
 
     @NotBlank
@@ -14,7 +16,8 @@ public class SetupForm {
     @Size(max = 64)
     private String username;
 
-    @Size(min = 12, max = 128, message = "12 à 128 caractères")
+    @NotBlank
+    @Size(min = 12, max = 72, message = "12 à 72 caractères")
     private String password;
 
     private String passwordConfirm;

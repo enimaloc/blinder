@@ -13,7 +13,7 @@ public class PasswordChangeForm {
     private String currentPassword;
 
     @NotBlank
-    @Size(min = 12, max = 128, message = "12 à 128 caractères")
+    @Size(min = 12, max = 72, message = "12 à 72 caractères")
     private String newPassword;
 
     private String confirmPassword;

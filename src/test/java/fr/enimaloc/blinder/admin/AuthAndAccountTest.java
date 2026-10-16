@@ -98,6 +98,17 @@ class AuthAndAccountTest {
     }
 
     @Test
+    void newPasswordOverSeventyTwoBytesIsAFieldError() throws Exception {
+        String tooLong = "é".repeat(37);
+        mvc.perform(post("/_/account/password").with(user(new BlinderUserDetails(admin))).with(csrf())
+                        .param("currentPassword", TestData.PASSWORD)
+                        .param("newPassword", tooLong)
+                        .param("confirmPassword", tooLong))
+                .andExpect(status().isOk())
+                .andExpect(model().attributeHasFieldErrors("form", "newPassword"));
+    }
+
+    @Test
     void adminFormsRequireCsrf() throws Exception {
         mvc.perform(post("/_/account/password").with(user(new BlinderUserDetails(admin)))
                         .param("currentPassword", TestData.PASSWORD))
