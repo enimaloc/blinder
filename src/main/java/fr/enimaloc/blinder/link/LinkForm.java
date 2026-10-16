@@ -5,6 +5,7 @@ import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.Size;
 import lombok.Data;
 import org.springframework.format.annotation.DateTimeFormat;
 
@@ -23,6 +24,7 @@ public class LinkForm {
     private String slug;
 
     @NotBlank
+    @Size(max = 2048)
     private String targetUrl;
 
     private boolean enabled = true;
@@ -41,6 +43,7 @@ public class LinkForm {
     @Min(1)
     private Integer maxUses;
 
+    @Size(max = 2048)
     private String deniedUrl;
 
     private Long version;

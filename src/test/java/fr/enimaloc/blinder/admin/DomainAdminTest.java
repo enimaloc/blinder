@@ -91,6 +91,16 @@ class DomainAdminTest {
     }
 
     @Test
+    void rejectsOverlongNotFoundUrl() throws Exception {
+        mvc.perform(post("/_/domains").with(asAdmin).with(csrf())
+                        .param("host", "go.example.com").param("enabled", "true")
+                        .param("notFoundUrl", "https://example.com/" + "a".repeat(2029)))
+                .andExpect(status().isOk())
+                .andExpect(model().attributeHasFieldErrors("form", "notFoundUrl"))
+                .andExpect(model().attributeErrorCount("form", 1));
+    }
+
+    @Test
     void updatesDomain() throws Exception {
         Domain domain = data.domain("go.example.com", admin);
         mvc.perform(post("/_/domains/{id}", domain.getId()).with(asAdmin).with(csrf())

@@ -115,6 +115,20 @@ class LinkAdminTest {
     }
 
     @Test
+    void rejectsOverlongUrlsOnTheRightField() throws Exception {
+        String overlong = "https://example.com/" + "a".repeat(2029);
+        assertThat(overlong).hasSize(2049);
+        mvc.perform(createLink("long1", overlong))
+                .andExpect(status().isOk())
+                .andExpect(model().attributeHasFieldErrors("form", "targetUrl"))
+                .andExpect(model().attributeErrorCount("form", 1));
+        mvc.perform(createLink("long2", "https://example.com").param("deniedUrl", overlong))
+                .andExpect(status().isOk())
+                .andExpect(model().attributeHasFieldErrors("form", "deniedUrl"));
+        assertThat(links.findAll()).isEmpty();
+    }
+
+    @Test
     void rejectsExpiryBeforeActivation() throws Exception {
         mvc.perform(createLink("c", "https://example.com")
                         .param("notBefore", "2026-10-20T10:00")
