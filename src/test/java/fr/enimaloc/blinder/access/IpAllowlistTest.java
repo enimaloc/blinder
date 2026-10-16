@@ -23,7 +23,8 @@ class IpAllowlistTest {
 
     @ParameterizedTest
     @ValueSource(strings = {"example.com", "localhost", "10.0.0.256", "10.0.0.0/33", "2001:db8::/129",
-            "10.0.0.0/-1", "10.0.0.0/", "1:2", "fe80::1%eth0", "10.0.0", "::g"})
+            "10.0.0.0/-1", "10.0.0.0/", "1:2", "fe80::1%eth0", "10.0.0", "::g",
+            "a:b", ":::", "1.2.3.4:5", "::1.2.3.256", "dead:beef", "010.0.0.1", "1.2.3.4::", "1.2.3.4::5"})
     void rejectsInvalidEntriesWithoutDns(String entry) {
         assertThatThrownBy(() -> IpAllowlist.normalize(entry))
                 .isInstanceOf(IllegalArgumentException.class)
@@ -71,6 +72,14 @@ class IpAllowlistTest {
         IpAllowlist list = IpAllowlist.parse("0.0.0.0/0");
         assertThat(list.matches("8.8.8.8")).isTrue();
         assertThat(list.matches("2001:db8::1")).isFalse();
+    }
+
+    @Test
+    void ipv6ZeroPrefixMatchesOnlyIpv6() {
+        IpAllowlist list = IpAllowlist.parse("::/0");
+        assertThat(list.matches("2001:db8::1")).isTrue();
+        assertThat(list.matches("0:0:0:0:0:0:0:0")).isTrue();
+        assertThat(list.matches("203.0.113.9")).isFalse(); // IPv4 does not match IPv6 prefix
     }
 
     @Test

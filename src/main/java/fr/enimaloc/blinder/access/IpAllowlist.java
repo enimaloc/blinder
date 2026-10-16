@@ -1,23 +1,18 @@
 package fr.enimaloc.blinder.access;
 
-import java.net.InetAddress;
-import java.net.UnknownHostException;
+import fr.enimaloc.blinder.common.IpLiterals;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import java.util.StringTokenizer;
 
 /** Liste d'IP / plages CIDR (IPv4, IPv6). N'effectue jamais de résolution DNS. */
 public final class IpAllowlist {
 
     public static final int MAX_ENTRIES = 50;
 
-    private static final Pattern IPV4 = Pattern.compile("^(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})$");
-    private static final Pattern IPV6_CHARS = Pattern.compile("^[0-9a-fA-F:.]+$");
-    private static final Pattern PREFIX = Pattern.compile("^\\d{1,3}$");
     private static final IpAllowlist EMPTY = new IpAllowlist(List.of());
 
     private final List<Range> ranges;
@@ -49,10 +44,9 @@ public final class IpAllowlist {
             return null;
         }
         Set<String> canonical = new LinkedHashSet<>();
-        for (String raw : input.trim().split("[,\\s]+")) {
-            if (raw.isEmpty()) {
-                continue;
-            }
+        StringTokenizer tokens = new StringTokenizer(input, ", \t\n\r\f");
+        while (tokens.hasMoreTokens()) {
+            String raw = tokens.nextToken();
             Range range = parseEntry(raw)
                     .orElseThrow(() -> new IllegalArgumentException("Entrée invalide : " + raw));
             canonical.add(range.canonical());
@@ -82,7 +76,7 @@ public final class IpAllowlist {
         if (slash >= 0) {
             ip = entry.substring(0, slash);
             String bits = entry.substring(slash + 1);
-            if (!PREFIX.matcher(bits).matches()) {
+            if (!isPrefixDigits(bits)) {
                 return Optional.empty();
             }
             prefix = Integer.parseInt(bits);
@@ -99,33 +93,21 @@ public final class IpAllowlist {
         return Optional.of(new Range(address.get(), bits));
     }
 
-    /** Analyse une IP littérale ; tout ce qui n'est pas strictement une IP est refusé avant InetAddress. */
-    static Optional<byte[]> literal(String ip) {
-        if (ip == null || ip.isEmpty()) {
-            return Optional.empty();
+    private static boolean isPrefixDigits(String bits) {
+        if (bits.isEmpty() || bits.length() > 3) {
+            return false;
         }
-        Matcher v4 = IPV4.matcher(ip);
-        if (v4.matches()) {
-            byte[] bytes = new byte[4];
-            for (int i = 0; i < 4; i++) {
-                int part = Integer.parseInt(v4.group(i + 1));
-                if (part > 255) {
-                    return Optional.empty();
-                }
-                bytes[i] = (byte) part;
+        for (int i = 0; i < bits.length(); i++) {
+            if (bits.charAt(i) < '0' || bits.charAt(i) > '9') {
+                return false;
             }
-            return Optional.of(bytes);
         }
-        if (ip.indexOf(':') < 0 || !IPV6_CHARS.matcher(ip).matches()) {
-            return Optional.empty();
-        }
-        try {
-            // Contient ':' : InetAddress l'analyse comme littéral IPv6 et échoue sans résolution DNS.
-            // ::ffff:a.b.c.d est renvoyé comme Inet4Address (4 octets).
-            return Optional.of(InetAddress.getByName(ip).getAddress());
-        } catch (UnknownHostException e) {
-            return Optional.empty();
-        }
+        return true;
+    }
+
+    /** Analyse une IP littérale via IpLiterals (pas de résolution DNS). */
+    static Optional<byte[]> literal(String ip) {
+        return IpLiterals.parse(ip);
     }
 
     record Range(byte[] network, int prefix) {
@@ -149,12 +131,8 @@ public final class IpAllowlist {
         }
 
         String canonical() {
-            try {
-                String host = InetAddress.getByAddress(network).getHostAddress();
-                return prefix == network.length * 8 ? host : host + "/" + prefix;
-            } catch (UnknownHostException e) {
-                throw new IllegalStateException(e);
-            }
+            String host = IpLiterals.format(network);
+            return prefix == network.length * 8 ? host : host + "/" + prefix;
         }
     }
 }

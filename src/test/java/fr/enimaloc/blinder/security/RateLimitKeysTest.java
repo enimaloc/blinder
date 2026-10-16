@@ -60,4 +60,50 @@ class RateLimitKeysTest {
         String key = RateLimitKeys.adminLogin("192.0.2.1");
         assertThat(key).startsWith("admin-login:");
     }
+
+    @Test
+    void ipv6WithEmbeddedNotationReturnsPrefix() {
+        // 2001:db8:1:2::ffff:5 should return the /64 prefix, not IPv4
+        String key = RateLimitKeys.client("2001:db8:1:2::ffff:5");
+        assertThat(key).isEqualTo("2001:db8:1:2::/64");
+    }
+
+    @Test
+    void ipv4MappedFullFormExtractsIpv4() {
+        // 0:0:0:0:0:ffff:192.0.2.1 (full form)
+        assertThat(RateLimitKeys.client("0:0:0:0:0:ffff:192.0.2.1")).isEqualTo("192.0.2.1");
+    }
+
+    @Test
+    void ipv4MappedHexFormExtractsIpv4() {
+        // ::ffff:c000:201 (hex form of 192.0.2.1)
+        assertThat(RateLimitKeys.client("::ffff:c000:201")).isEqualTo("192.0.2.1");
+    }
+
+    @Test
+    void twoIpv6AddressesInSamePrefixReturnSamePrefix() {
+        String addr1 = "2001:0db8:0001:0002::1";
+        String addr2 = "2001:db8:1:2::9";
+
+        assertThat(RateLimitKeys.client(addr1)).isEqualTo(RateLimitKeys.client(addr2));
+        assertThat(RateLimitKeys.client(addr1)).isEqualTo("2001:db8:1:2::/64");
+    }
+
+    @Test
+    void differentIpv6PrefixesReturnDifferentPrefix() {
+        String addr1 = "2001:db8:1:2::1";
+        String addr2 = "2001:db8:1:3::1";
+
+        String key1 = RateLimitKeys.client(addr1);
+        String key2 = RateLimitKeys.client(addr2);
+
+        assertThat(key1).isEqualTo("2001:db8:1:2::/64");
+        assertThat(key2).isEqualTo("2001:db8:1:3::/64");
+        assertThat(key1).isNotEqualTo(key2);
+    }
+
+    @Test
+    void garbageValueUnchanged() {
+        assertThat(RateLimitKeys.client("garbage123")).isEqualTo("garbage123");
+    }
 }
