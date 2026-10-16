@@ -65,4 +65,27 @@ public class LinkForm {
     private boolean deviceProtected;
 
     private Set<UUID> deviceIds = new LinkedHashSet<>();
+
+    @NotNull
+    private Integer redirectStatus = 302;
+
+    private boolean forwardQuery;
+
+    private boolean interstitial;
+
+    @Min(0)
+    @Max(60)
+    private int interstitialSeconds;
+
+    @NotNull
+    private MetaMode metaMode = MetaMode.NONE;
+
+    @Size(max = 200)
+    private String metaTitle;
+
+    @Size(max = 500)
+    private String metaDescription;
+
+    @Size(max = 2048)
+    private String metaImageUrl;
 }

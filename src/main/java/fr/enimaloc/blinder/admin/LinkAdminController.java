@@ -63,6 +63,7 @@ public class LinkAdminController {
         model.addAttribute("domains", owned);
         model.addAttribute("devices", deviceService.all(owner));
         model.addAttribute("hasPassword", false);
+        model.addAttribute("limitedOrProtected", false);
         return "admin/links/form";
     }
 
@@ -72,6 +73,7 @@ public class LinkAdminController {
         model.addAttribute("domains", domains.list(owner));
         model.addAttribute("devices", deviceService.all(owner));
         model.addAttribute("hasPassword", false);
+        model.addAttribute("limitedOrProtected", false);
         if (binding.hasErrors()) {
             return "admin/links/form";
         }
@@ -140,5 +142,7 @@ public class LinkAdminController {
         model.addAttribute("devices", deviceService.all(owner));
         model.addAttribute("hasPassword", link.getPasswordHash() != null);
         model.addAttribute("noDeviceLeft", links.hasNoDeviceLeft(link));
+        model.addAttribute("limitedOrProtected", link.getPasswordHash() != null || link.getIpAllowlist() != null
+                || link.isDeviceProtected() || link.getMaxUses() != null || link.getTtlAfterFirstUse() != null);
     }
 }

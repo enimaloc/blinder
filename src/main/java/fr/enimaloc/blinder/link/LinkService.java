@@ -9,6 +9,7 @@ import fr.enimaloc.blinder.device.Device;
 import fr.enimaloc.blinder.device.DeviceRepository;
 import fr.enimaloc.blinder.domain.Domain;
 import fr.enimaloc.blinder.domain.DomainRepository;
+import fr.enimaloc.blinder.redirect.RedirectPolicy;
 import fr.enimaloc.blinder.user.User;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -86,6 +87,14 @@ public class LinkService {
         form.setIpAllowlist(link.getIpAllowlist() == null ? null : link.getIpAllowlist().replace(",", "\n"));
         form.setDeviceProtected(link.isDeviceProtected());
         form.setDeviceIds(new LinkedHashSet<>(links.findDeviceIds(link.getId())));
+        form.setRedirectStatus(link.getRedirectStatus());
+        form.setForwardQuery(link.isForwardQuery());
+        form.setInterstitial(link.isInterstitial());
+        form.setInterstitialSeconds(link.getInterstitialSeconds());
+        form.setMetaMode(link.getMetaMode());
+        form.setMetaTitle(link.getMetaTitle());
+        form.setMetaDescription(link.getMetaDescription());
+        form.setMetaImageUrl(link.getMetaImageUrl());
         return form;
     }
 
@@ -170,6 +179,7 @@ public class LinkService {
         link.setMaxUses(form.getMaxUses());
         link.setDeniedUrl(deniedUrl);
         applyProtection(link, form, owner);
+        applyRedirect(link, form);
     }
 
     private void applyProtection(Link link, LinkForm form, User owner) {
@@ -198,6 +208,37 @@ public class LinkService {
         link.getDevices().clear();
         link.getDevices().addAll(owned);
         link.setDeviceProtected(form.isDeviceProtected() || !owned.isEmpty());
+    }
+
+    private static final Set<Integer> REDIRECT_STATUSES = Set.of(301, 302, 307, 308);
+
+    /** Appelée après applyProtection : la restriction des statuts permanents dépend des protections du lien. */
+    private void applyRedirect(Link link, LinkForm form) {
+        int status = form.getRedirectStatus() == null ? 302 : form.getRedirectStatus();
+        if (!REDIRECT_STATUSES.contains(status)) {
+            throw new FieldErrorException("redirectStatus", "Code de redirection non pris en charge");
+        }
+        MetaMode mode = form.getMetaMode() == null ? MetaMode.NONE : form.getMetaMode();
+        String title = blankToNull(form.getMetaTitle());
+        String image = blankToNull(form.getMetaImageUrl());
+        if (mode == MetaMode.CUSTOM && title == null) {
+            throw new FieldErrorException("metaTitle", "Titre requis pour un aperçu personnalisé");
+        }
+        if (image != null && !UrlPolicy.isHttpUrl(image)) {
+            throw new FieldErrorException("metaImageUrl", "URL http(s) absolue requise");
+        }
+        link.setRedirectStatus(status);
+        link.setForwardQuery(form.isForwardQuery());
+        link.setInterstitial(form.isInterstitial());
+        link.setInterstitialSeconds(form.getInterstitialSeconds());
+        link.setMetaMode(mode);
+        link.setMetaTitle(title);
+        link.setMetaDescription(blankToNull(form.getMetaDescription()));
+        link.setMetaImageUrl(image);
+        if ((status == 301 || status == 308) && !RedirectPolicy.isBare(link)) {
+            throw new FieldErrorException("redirectStatus",
+                    "301/308 réservés aux liens sans limite, date ni protection (mis en cache par les navigateurs)");
+        }
     }
 
     private Instant toInstant(LocalDateTime local) {
