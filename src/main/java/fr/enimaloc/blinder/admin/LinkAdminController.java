@@ -7,6 +7,7 @@ import fr.enimaloc.blinder.device.DeviceService;
 import fr.enimaloc.blinder.domain.Domain;
 import fr.enimaloc.blinder.domain.DomainService;
 import fr.enimaloc.blinder.link.Link;
+import fr.enimaloc.blinder.link.LinkEditService;
 import fr.enimaloc.blinder.link.LinkForm;
 import fr.enimaloc.blinder.link.LinkService;
 import fr.enimaloc.blinder.link.preview.LinkPreviewService;
@@ -17,7 +18,6 @@ import fr.enimaloc.blinder.user.CurrentUser;
 import fr.enimaloc.blinder.user.User;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.stereotype.Controller;
@@ -36,7 +36,6 @@ import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.UUID;
 
-@Slf4j
 @Controller
 @RequestMapping("/_")
 @RequiredArgsConstructor
@@ -46,6 +45,7 @@ public class LinkAdminController {
 
     private final CurrentUser currentUser;
     private final LinkService links;
+    private final LinkEditService edits;
     private final DomainService domains;
     private final LinkStatusResolver statuses;
     private final DeviceService deviceService;
@@ -97,11 +97,9 @@ public class LinkAdminController {
             return "admin/links/form";
         }
         try {
-            linkNotifications.validate(owner, form);
-            Link created = links.create(owner, form);
-            linkNotifications.apply(owner, created, form);
+            Link created = edits.create(owner, form);
             warnIfExposed(flash, created);
-            refreshPreviewQuietly(owner, created);
+            edits.refreshPreviewAfterSave(owner, created, null);
         } catch (FieldErrorException e) {
             binding.rejectValue(e.field(), "invalid", e.getMessage());
             return "admin/links/form";
@@ -137,14 +135,9 @@ public class LinkAdminController {
         try {
             // `current` vient d'un chargement distinct de celui de update() (open-in-view désactivé)
             String previousTarget = current.getTargetUrl();
-            linkNotifications.validate(owner, form);
-            Link updated = links.update(owner, id, form);
-            linkNotifications.apply(owner, updated, form);
+            Link updated = edits.update(owner, id, form);
             warnIfExposed(flash, updated);
-            if (!previousTarget.equals(updated.getTargetUrl())) {
-                previews.discard(id);
-            }
-            refreshPreviewQuietly(owner, updated);
+            edits.refreshPreviewAfterSave(owner, updated, previousTarget);
         } catch (FieldErrorException e) {
             binding.rejectValue(e.field(), "invalid", e.getMessage());
             return "admin/links/form";
@@ -160,7 +153,7 @@ public class LinkAdminController {
 
     @PostMapping("/links/{id}/reset")
     public String reset(@PathVariable UUID id) {
-        links.resetUsage(currentUser.require(), id);
+        edits.resetUsage(currentUser.require(), id);
         return "redirect:/_/links/" + id;
     }
 
@@ -191,18 +184,6 @@ public class LinkAdminController {
         model.addAttribute("preview", preview);
         model.addAttribute("previewFetchedAt", preview == null || preview.getFetchedAt() == null ? null
                 : PREVIEW_DATE.format(preview.getFetchedAt().atZone(properties.admin().timeZone())));
-    }
-
-    /** Le lien est déjà enregistré : un échec de l'aperçu ne doit jamais faire échouer l'enregistrement. */
-    private void refreshPreviewQuietly(User owner, Link saved) {
-        if (saved.getMetaMode() != MetaMode.PASSTHROUGH) {
-            return;
-        }
-        try {
-            previews.refresh(owner, saved.getId());
-        } catch (RuntimeException e) {
-            log.warn("Preview refresh failed for link {}", saved.getId(), e);
-        }
     }
 
     private static void warnIfExposed(RedirectAttributes flash, Link saved) {

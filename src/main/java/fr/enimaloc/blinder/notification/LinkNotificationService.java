@@ -9,8 +9,10 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -23,6 +25,7 @@ public class LinkNotificationService {
     private final LinkNotificationSettingsRepository settings;
     private final NotificationChannelRepository channels;
     private final LinkRepository links;
+    private final FiredTriggerRepository firedTriggers;
 
     @Transactional(readOnly = true)
     public Optional<LinkNotificationSettings> settingsFor(UUID linkId) {
@@ -41,6 +44,7 @@ public class LinkNotificationService {
         boolean anyTrigger = form.isNotifyExhausted() || form.isNotifyExpired() || form.isNotifyDenials()
                 || form.isNotifyEachVisit() || form.getNotifyThreshold() != null;
         Optional<LinkNotificationSettings> existing = settings.findWithChannelsByLinkId(link.getId());
+        rearm(link.getId(), existing.orElse(null), form);
         if (!anyTrigger && selected.isEmpty()) {
             existing.ifPresent(settings::delete);
             return;
@@ -55,6 +59,24 @@ public class LinkNotificationService {
         s.getChannels().clear();
         s.getChannels().addAll(selected);
         settings.save(s);
+    }
+
+    /** Réarme ce qui a changé : seuil modifié, ou case « épuisé »/« expiré »/seuil nouvellement activée. */
+    private void rearm(UUID linkId, LinkNotificationSettings before, LinkForm form) {
+        Set<TriggerType> types = EnumSet.noneOf(TriggerType.class);
+        if (form.isNotifyExhausted() && (before == null || !before.isOnExhausted())) {
+            types.add(TriggerType.EXHAUSTED);
+        }
+        if (form.isNotifyExpired() && (before == null || !before.isOnExpired())) {
+            types.add(TriggerType.EXPIRED);
+        }
+        Integer previousThreshold = before == null ? null : before.getVisitThreshold();
+        if (!Objects.equals(previousThreshold, form.getNotifyThreshold())) {
+            types.add(TriggerType.THRESHOLD);
+        }
+        if (!types.isEmpty()) {
+            firedTriggers.deleteByLinkIdAndTriggerTypeIn(linkId, types);
+        }
     }
 
     @Transactional(readOnly = true)

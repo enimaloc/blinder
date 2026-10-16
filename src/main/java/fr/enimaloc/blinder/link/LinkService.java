@@ -24,6 +24,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.EnumSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
@@ -123,6 +124,10 @@ public class LinkService {
         if (form.getVersion() != null && !Objects.equals(form.getVersion(), link.getVersion())) {
             throw new StaleEditException();
         }
+        Instant notBeforeBefore = link.getNotBefore();
+        Instant expiresAtBefore = link.getExpiresAt();
+        Duration ttlBefore = link.getTtlAfterFirstUse();
+        Integer maxUsesBefore = link.getMaxUses();
         Domain domain = ownedDomain(owner, form.getDomainId());
         // Slug vide à l'édition : on conserve l'actuel (revalidé : unicité sur le domaine cible).
         String requested = form.getSlug() == null || form.getSlug().isBlank() ? link.getSlug() : form.getSlug();
@@ -130,19 +135,26 @@ public class LinkService {
         link.setDomain(domain);
         apply(link, form, owner);
         Link saved = links.saveAndFlush(link);
-        rearmNotifications(id);
+        Set<TriggerType> rearm = EnumSet.noneOf(TriggerType.class);
+        if (!Objects.equals(maxUsesBefore, saved.getMaxUses())) {
+            rearm.add(TriggerType.EXHAUSTED);
+        }
+        if (!Objects.equals(notBeforeBefore, saved.getNotBefore())
+                || !Objects.equals(expiresAtBefore, saved.getExpiresAt())
+                || !Objects.equals(ttlBefore, saved.getTtlAfterFirstUse())) {
+            rearm.add(TriggerType.EXPIRED);
+        }
+        if (!rearm.isEmpty()) {
+            firedTriggers.deleteByLinkIdAndTriggerTypeIn(id, rearm);
+        }
         return saved;
     }
 
     @Transactional
     public void resetUsage(User owner, UUID id) {
         links.resetUsage(get(owner, id).getId());
-        rearmNotifications(id);
-    }
-
-    /** Un lien modifié ou remis à zéro peut de nouveau notifier seuil, épuisement et expiration. */
-    private void rearmNotifications(UUID linkId) {
-        firedTriggers.deleteByLinkIdAndTriggerTypeIn(linkId,
+        // Compteur remis à zéro : seuil, épuisement et expiration (le TTL repart) peuvent de nouveau notifier.
+        firedTriggers.deleteByLinkIdAndTriggerTypeIn(id,
                 Set.of(TriggerType.EXHAUSTED, TriggerType.EXPIRED, TriggerType.THRESHOLD));
     }
 
