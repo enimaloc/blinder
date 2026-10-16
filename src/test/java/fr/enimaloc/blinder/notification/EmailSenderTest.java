@@ -39,7 +39,7 @@ class EmailSenderTest {
     void sendsToParsedAddressWithExpectedSubjectAndBody() {
         String payload = "{\"event\":\"VISIT\",\"text\":\"Visite de a.test/x depuis 1.2.3.4\","
                 + "\"visit\":{\"ip\":\"1.2.3.4\",\"country\":\"FR\",\"city\":\"Lyon\",\"browser\":\"Firefox\","
-                + "\"os\":\"Linux\",\"referer\":null,\"outcome\":\"REDIRECTED\",\"reason\":null}}";
+                + "\"os\":\"Linux\",\"referer\":null,\"userAgent\":\"UA/1\",\"outcome\":\"DENIED\",\"reason\":\"EXPIRED\"}}";
         NotificationDelivery delivery = delivery("Moi <me@example.com>", payload, TriggerType.VISIT, "a.test/x");
         SendResult result = sender(mail).send(delivery.getChannel(), delivery);
         assertThat(result).isEqualTo(new SendResult(true, null));
@@ -50,7 +50,15 @@ class EmailSenderTest {
         assertThat(message.getFrom()).isEqualTo("blinder@example.org");
         assertThat(message.getSubject()).isEqualTo("[Blinder] Visite — a.test/x");
         assertThat(message.getText()).contains("Visite de a.test/x depuis 1.2.3.4").contains("1.2.3.4")
-                .contains("Lyon").contains("Firefox");
+                .contains("Ville : Lyon").contains("Navigateur : Firefox").contains("User-Agent : UA/1")
+                .contains("Issue : Refusée").contains("Raison : Expiré");
+    }
+
+    @Test
+    void rejectsGroupAddress() {
+        NotificationDelivery delivery = delivery("Équipe: a@example.com, b@example.com;", "{\"text\":\"t\"}", TriggerType.TEST, "test");
+        assertThat(sender(mail).send(delivery.getChannel(), delivery)).isEqualTo(new SendResult(false, "Cible invalide"));
+        verify(mail, never()).send(any(SimpleMailMessage.class));
     }
 
     @Test

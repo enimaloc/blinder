@@ -102,7 +102,11 @@ public class ChannelService {
             }
         } else {
             try {
-                new InternetAddress(target, true).validate();
+                InternetAddress address = new InternetAddress(target, true);
+                address.validate();
+                if (address.isGroup()) {
+                    throw new FieldErrorException("target", "Adresse e-mail invalide");
+                }
             } catch (AddressException e) {
                 throw new FieldErrorException("target", "Adresse e-mail invalide");
             }

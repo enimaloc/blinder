@@ -87,6 +87,14 @@ class NotificationChannelAdminTest {
     }
 
     @Test
+    void rejectsGroupEmailAddress() throws Exception {
+        mvc.perform(create("EMAIL", "Équipe: a@example.com, b@example.com;"))
+                .andExpect(status().isOk())
+                .andExpect(model().attributeHasFieldErrors("form", "target"));
+        assertThat(channels.findAll()).isEmpty();
+    }
+
+    @Test
     void rejectsInvalidEmail() throws Exception {
         mvc.perform(create("EMAIL", "pas-un-mail"))
                 .andExpect(status().isOk())

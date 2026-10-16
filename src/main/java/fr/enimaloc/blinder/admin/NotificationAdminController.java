@@ -5,8 +5,8 @@ import fr.enimaloc.blinder.notification.ChannelForm;
 import fr.enimaloc.blinder.common.BlinderProperties;
 import fr.enimaloc.blinder.notification.ChannelService;
 import fr.enimaloc.blinder.notification.DeliveryService;
+import fr.enimaloc.blinder.notification.DeliveryStatus;
 import fr.enimaloc.blinder.notification.NotificationDelivery;
-import fr.enimaloc.blinder.notification.TriggerType;
 import fr.enimaloc.blinder.notification.NotificationChannel;
 import fr.enimaloc.blinder.user.CurrentUser;
 import fr.enimaloc.blinder.user.User;
@@ -117,22 +117,29 @@ public class NotificationAdminController {
 
     @PostMapping("/deliveries/{id}/retry")
     public String retry(@PathVariable UUID id, RedirectAttributes redirect) {
-        deliveries.retry(currentUser.require(), id);
-        redirect.addFlashAttribute("info", "Envoi relancé");
+        if (deliveries.retry(currentUser.require(), id)) {
+            redirect.addFlashAttribute("info", "Envoi relancé");
+        } else {
+            redirect.addFlashAttribute("info", "Envoi déjà en file ou envoyé.");
+        }
         return "redirect:/_/notifications";
     }
 
     @PostMapping("/channels/{id}/test")
     public String test(@PathVariable UUID id, RedirectAttributes redirect) {
-        deliveries.enqueueTest(currentUser.require(), id);
-        redirect.addFlashAttribute("info", "Test programmé");
+        try {
+            deliveries.enqueueTest(currentUser.require(), id);
+            redirect.addFlashAttribute("info", "Test programmé");
+        } catch (FieldErrorException e) {
+            redirect.addFlashAttribute("error", e.getMessage());
+        }
         return "redirect:/_/notifications";
     }
 
     private List<DeliveryRow> rows(List<NotificationDelivery> found) {
         return found.stream().map(d -> new DeliveryRow(d.getId(),
                 DATE.format(d.getCreatedAt().atZone(blinder.admin().timeZone())),
-                d.getChannel().getName(), eventLabel(d.getEvent()),
+                d.getChannel().getName(), d.getEvent().label(),
                 d.getLinkLabel() == null ? "" : d.getLinkLabel(),
                 switch (d.getStatus()) {
                     case PENDING -> "En attente";
@@ -140,18 +147,7 @@ public class NotificationAdminController {
                     case FAILED -> "Échec";
                 },
                 d.getAttempts(), d.getLastError(),
-                d.getStatus() == fr.enimaloc.blinder.notification.DeliveryStatus.FAILED)).toList();
-    }
-
-    private static String eventLabel(TriggerType event) {
-        return switch (event) {
-            case VISIT -> "Visite";
-            case THRESHOLD -> "Seuil de visites";
-            case EXHAUSTED -> "Lien épuisé";
-            case EXPIRED -> "Lien expiré";
-            case DENIALS -> "Refus répétés";
-            case TEST -> "Test";
-        };
+                d.getStatus() == DeliveryStatus.FAILED)).toList();
     }
 
     private void populateEdit(Model model, NotificationChannel channel) {

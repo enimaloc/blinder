@@ -129,6 +129,7 @@ class DeliveryDispatcherTest {
         NotificationDelivery after = reload(d);
         assertThat(after.getLastError()).isEqualTo("Canal désactivé");
         assertThat(after.getAttempts()).isEqualTo(1);
+        assertThat(after.getStatus()).isEqualTo(DeliveryStatus.FAILED);
     }
 
     @Test
@@ -179,9 +180,18 @@ class DeliveryDispatcherTest {
     }
 
     @Test
+    void testOnDisabledChannelIsRefused() {
+        channel.setEnabled(false);
+        channels.saveAndFlush(channel);
+        assertThatThrownBy(() -> deliveryService.enqueueTest(owner, channel.getId()))
+                .isInstanceOf(fr.enimaloc.blinder.common.FieldErrorException.class).hasMessage("Canal désactivé");
+        assertThat(deliveries.findAll()).isEmpty();
+    }
+
+    @Test
     void retryOnlyFailedAndOnlyOwn() {
         NotificationDelivery pending = pending(t0);
-        assertThatThrownBy(() -> deliveryService.retry(owner, pending.getId())).isInstanceOf(ResponseStatusException.class);
+        assertThat(deliveryService.retry(owner, pending.getId())).isFalse();
         User other = data.admin("other");
         pending.setStatus(DeliveryStatus.FAILED);
         deliveries.saveAndFlush(pending);

@@ -62,8 +62,9 @@ public class DeliveryDispatcher {
             }
             for (NotificationDelivery delivery : due) {
                 try {
-                    SendResult result = send(delivery);
-                    record(delivery, result, now);
+                    boolean disabled = !delivery.getChannel().isEnabled();
+                    // canal désactivé : échec définitif, pas de réessai
+                    record(delivery, disabled ? SendResult.failure("Canal désactivé") : send(delivery), now, disabled);
                 } catch (RuntimeException e) {
                     log.error("Envoi {} en échec inattendu", delivery.getId(), e);
                 }
@@ -77,9 +78,6 @@ public class DeliveryDispatcher {
 
     private SendResult send(NotificationDelivery delivery) {
         NotificationChannel channel = delivery.getChannel();
-        if (!channel.isEnabled()) {
-            return SendResult.failure("Canal désactivé");
-        }
         ChannelSender sender = senders.get(channel.getType());
         if (sender == null) {
             return SendResult.failure("Type de canal non géré");
@@ -91,7 +89,7 @@ public class DeliveryDispatcher {
         }
     }
 
-    private void record(NotificationDelivery sent, SendResult result, Instant now) {
+    private void record(NotificationDelivery sent, SendResult result, Instant now, boolean permanent) {
         transactions.executeWithoutResult(status -> deliveries.findById(sent.getId()).ifPresent(delivery -> {
             if (delivery.getStatus() != DeliveryStatus.PENDING) {
                 return;
@@ -106,7 +104,7 @@ public class DeliveryDispatcher {
             int attempts = delivery.getAttempts() + 1;
             delivery.setAttempts(attempts);
             delivery.setLastError(SendResult.truncate(result.error()));
-            if (attempts >= MAX_ATTEMPTS) {
+            if (permanent || attempts >= MAX_ATTEMPTS) {
                 delivery.setStatus(DeliveryStatus.FAILED);
                 delivery.setNextAttemptAt(null);
             } else {

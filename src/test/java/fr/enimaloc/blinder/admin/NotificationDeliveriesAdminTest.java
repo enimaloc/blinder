@@ -43,6 +43,8 @@ class NotificationDeliveriesAdminTest {
     TestData data;
     @Autowired
     NotificationDeliveryRepository deliveries;
+    @Autowired
+    fr.enimaloc.blinder.notification.NotificationChannelRepository channels;
 
     User admin;
     User other;
@@ -83,6 +85,26 @@ class NotificationDeliveriesAdminTest {
         mvc.perform(post("/_/notifications/deliveries/" + d.getId() + "/retry").with(asAdmin).with(csrf()))
                 .andExpect(redirectedUrl("/_/notifications"));
         assertThat(deliveries.findById(d.getId()).orElseThrow().getStatus()).isEqualTo(DeliveryStatus.PENDING);
+    }
+
+    @Test
+    void retryOfNonFailedDeliveryRedirectsWithMessage() throws Exception {
+        NotificationDelivery d = delivery(admin, "C", "mien.test/a", DeliveryStatus.SENT);
+        mvc.perform(post("/_/notifications/deliveries/" + d.getId() + "/retry").with(asAdmin).with(csrf()))
+                .andExpect(redirectedUrl("/_/notifications"))
+                .andExpect(flash().attribute("info", "Envoi déjà en file ou envoyé."));
+        assertThat(deliveries.findById(d.getId()).orElseThrow().getStatus()).isEqualTo(DeliveryStatus.SENT);
+    }
+
+    @Test
+    void testOnDisabledChannelShowsError() throws Exception {
+        NotificationChannel channel = data.channel(admin, "C", ChannelType.EMAIL, "a@example.com");
+        channel.setEnabled(false);
+        channels.saveAndFlush(channel);
+        mvc.perform(post("/_/notifications/channels/" + channel.getId() + "/test").with(asAdmin).with(csrf()))
+                .andExpect(redirectedUrl("/_/notifications"))
+                .andExpect(flash().attribute("error", "Canal désactivé"));
+        assertThat(deliveries.findAll()).isEmpty();
     }
 
     @Test

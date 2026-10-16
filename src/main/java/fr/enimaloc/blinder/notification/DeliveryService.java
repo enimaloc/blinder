@@ -1,5 +1,6 @@
 package fr.enimaloc.blinder.notification;
 
+import fr.enimaloc.blinder.common.FieldErrorException;
 import fr.enimaloc.blinder.link.Link;
 import fr.enimaloc.blinder.stats.Visit;
 import fr.enimaloc.blinder.user.User;
@@ -57,22 +58,26 @@ public class DeliveryService {
     public void enqueueTest(User owner, UUID channelId) {
         NotificationChannel channel = channels.findByIdAndOwner(channelId, owner)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+        if (!channel.isEnabled()) {
+            throw new FieldErrorException("channel", "Canal désactivé");
+        }
         Instant now = Instant.now(clock);
         deliveries.save(new NotificationDelivery(owner, channel, null, "test", TriggerType.TEST,
                 payloads.json(TriggerType.TEST, now, null, null), now));
     }
 
-    /** Remet un envoi échoué en file, dû immédiatement. 404 si autre propriétaire ; seulement {@code FAILED}. */
+    /** Remet un envoi échoué en file, dû immédiatement. 404 si autre propriétaire ; {@code false} si pas {@code FAILED}. */
     @Transactional
-    public void retry(User owner, UUID deliveryId) {
+    public boolean retry(User owner, UUID deliveryId) {
         NotificationDelivery delivery = deliveries.findByIdAndOwner(deliveryId, owner)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
         if (delivery.getStatus() != DeliveryStatus.FAILED) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT);
+            return false;
         }
         delivery.setStatus(DeliveryStatus.PENDING);
         delivery.setAttempts(0);
         delivery.setNextAttemptAt(Instant.now(clock));
+        return true;
     }
 
     @Transactional(readOnly = true)
