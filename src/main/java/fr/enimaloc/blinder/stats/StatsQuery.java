@@ -7,7 +7,9 @@ import jakarta.persistence.EntityManager;
 import jakarta.persistence.TypedQuery;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -47,10 +49,14 @@ public class StatsQuery {
                            DenyReason denyReason, String ip, String country, String browser, String refererHost) {
     }
 
+    private record Page(List<String[]> lines, Instant lastAt, UUID lastId) {
+    }
+
     private final EntityManager em;
     private final StatsProperties stats;
     private final BlinderProperties blinder;
     private final Clock clock;
+    private final TransactionTemplate transactions;
 
     public List<DayPoint> daily(User owner, UUID linkId, StatsPeriod period) {
         ZoneId zone = blinder.admin().timeZone();
@@ -132,10 +138,17 @@ public class StatsQuery {
         return !retention.isZero() && period.days() > retention.toDays();
     }
 
-    /** Écrit toutes les visites de la période, de la plus ancienne à la plus récente. */
+    /**
+     * Écrit toutes les visites de la période, de la plus ancienne à la plus récente. Chaque page est lue dans sa
+     * propre transaction en lecture seule ; l'écriture vers le client se fait hors transaction pour ne pas
+     * garder la connexion à la base pendant un envoi lent.
+     */
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public void exportCsv(User owner, UUID linkId, StatsPeriod period, Writer out) {
         ZoneId zone = blinder.admin().timeZone();
         CsvWriter csv = new CsvWriter(out);
+        TransactionTemplate reads = new TransactionTemplate(transactions.getTransactionManager());
+        reads.setReadOnly(true);
         // Bornes calculées une fois : l'export reste cohérent même s'il dure.
         Instant to = clock.instant();
         Instant from = periodStart(period);
@@ -146,26 +159,34 @@ public class StatsQuery {
             while (true) {
                 String after = lastAt == null ? ""
                         : "and (v.occurredAt > :lastAt or (v.occurredAt = :lastAt and v.id > :lastId)) ";
-                TypedQuery<Visit> page = visitQuery("select v from Visit v join fetch v.link l join fetch l.domain",
-                        after + "order by v.occurredAt, v.id", Visit.class, owner, linkId, from, to);
-                if (lastAt != null) {
-                    page.setParameter("lastAt", lastAt).setParameter("lastId", lastId);
+                Instant cursorAt = lastAt;
+                UUID cursorId = lastId;
+                Page page = reads.execute(status -> {
+                    TypedQuery<Visit> query = visitQuery("select v from Visit v join fetch v.link l join fetch l.domain",
+                            after + "order by v.occurredAt, v.id", Visit.class, owner, linkId, from, to);
+                    if (cursorAt != null) {
+                        query.setParameter("lastAt", cursorAt).setParameter("lastId", cursorId);
+                    }
+                    List<Visit> visits = query.setMaxResults(EXPORT_PAGE).getResultList();
+                    List<String[]> lines = new ArrayList<>(visits.size());
+                    for (Visit v : visits) {
+                        lines.add(new String[]{DateTimeFormatter.ISO_OFFSET_DATE_TIME.format(v.getOccurredAt().atZone(zone)),
+                                v.getLink().getDomain().getHost(), v.getLink().getSlug(), v.getOutcome().name(),
+                                v.getDenyReason() == null ? null : v.getDenyReason().name(), v.getHttpMethod(),
+                                String.valueOf(v.isBot()), v.getIp(), v.getCountry(), v.getCity(), v.getBrowser(),
+                                v.getOs(), v.getReferer(), v.getUserAgent()});
+                    }
+                    Visit last = visits.isEmpty() ? null : visits.getLast();
+                    return new Page(lines, last == null ? null : last.getOccurredAt(), last == null ? null : last.getId());
+                });
+                for (String[] line : page.lines()) {
+                    csv.row(line);
                 }
-                List<Visit> rows = page.setMaxResults(EXPORT_PAGE).getResultList();
-                for (Visit v : rows) {
-                    csv.row(DateTimeFormatter.ISO_OFFSET_DATE_TIME.format(v.getOccurredAt().atZone(zone)),
-                            v.getLink().getDomain().getHost(), v.getLink().getSlug(), v.getOutcome().name(),
-                            v.getDenyReason() == null ? null : v.getDenyReason().name(), v.getHttpMethod(),
-                            String.valueOf(v.isBot()), v.getIp(), v.getCountry(), v.getCity(), v.getBrowser(),
-                            v.getOs(), v.getReferer(), v.getUserAgent());
-                }
-                if (rows.size() < EXPORT_PAGE) {
+                if (page.lines().size() < EXPORT_PAGE) {
                     break;
                 }
-                Visit last = rows.getLast();
-                lastAt = last.getOccurredAt();
-                lastId = last.getId();
-                em.clear();
+                lastAt = page.lastAt();
+                lastId = page.lastId();
             }
             out.flush();
         } catch (IOException e) {

@@ -9,6 +9,12 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.transaction.support.TransactionTemplate;
+
+import java.io.IOException;
+import java.io.Writer;
+import java.util.ArrayList;
 
 import java.time.Clock;
 import java.time.Duration;
@@ -32,6 +38,8 @@ class StatsQueryTest {
     BlinderProperties blinder;
     @Autowired
     Clock clock;
+    @Autowired
+    TransactionTemplate transactions;
 
     User admin;
     Link link;
@@ -96,5 +104,32 @@ class StatsQueryTest {
                 .containsExactly(new StatsQuery.Count("Direct", 2));
         assertThat(query.browsers(admin, null, StatsPeriod.D7))
                 .containsExactly(new StatsQuery.Count("Chrome", 2));
+    }
+
+    @Test
+    void csvIsWrittenOutsideAnyTransaction() {
+        Instant now = clock.instant().minusSeconds(60);
+        data.visit(link, VisitOutcome.REDIRECTED, now, "203.0.113.1");
+        data.visit(link, VisitOutcome.DENIED, now, "203.0.113.2");
+        List<Boolean> activeDuringWrite = new ArrayList<>();
+        Writer probe = new Writer() {
+            @Override
+            public void write(char[] buf, int off, int len) {
+                activeDuringWrite.add(TransactionSynchronizationManager.isActualTransactionActive());
+            }
+
+            @Override
+            public void flush() throws IOException {
+            }
+
+            @Override
+            public void close() throws IOException {
+            }
+        };
+
+        // même appelé depuis une transaction, l'export la suspend
+        transactions.executeWithoutResult(status -> query.exportCsv(admin, null, StatsPeriod.D7, probe));
+
+        assertThat(activeDuringWrite).hasSizeGreaterThanOrEqualTo(3).containsOnly(false);
     }
 }
