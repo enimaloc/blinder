@@ -27,7 +27,7 @@ class SecurityChainsTest {
     }
 
     @Test
-    void dataRestIsUnderAdminPrefix() throws Exception {
+    void bareApiPathStaysOnAdminChain() throws Exception {
         mvc.perform(get("http://go.example.com/_/api"))
                 .andExpect(status().isFound())
                 .andExpect(redirectedUrlPattern("/**/_/login"));
