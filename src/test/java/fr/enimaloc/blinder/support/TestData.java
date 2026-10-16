@@ -24,6 +24,7 @@ import fr.enimaloc.blinder.stats.Visit;
 import fr.enimaloc.blinder.stats.VisitDailyStatRepository;
 import fr.enimaloc.blinder.stats.VisitOutcome;
 import fr.enimaloc.blinder.stats.VisitRepository;
+import fr.enimaloc.blinder.stats.VisitWriter;
 import fr.enimaloc.blinder.user.Role;
 import fr.enimaloc.blinder.user.User;
 import fr.enimaloc.blinder.user.UserRepository;
@@ -53,8 +54,10 @@ public class TestData {
     private final FiredTriggerRepository firedTriggers;
     private final NotificationDeliveryRepository deliveries;
     private final TransactionTemplate transactions;
+    private final VisitWriter visitWriter;
 
     public void reset() {
+        visitWriter.flush();
         deliveries.deleteAllInBatch();
         firedTriggers.deleteAllInBatch();
         // deleteAll() (et non InBatch) : charge les entités pour vider la table de jointure des canaux.

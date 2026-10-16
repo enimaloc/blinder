@@ -22,7 +22,7 @@ public interface NotificationDeliveryRepository extends JpaRepository<Notificati
     Optional<NotificationDelivery> findByIdAndOwner(UUID id, User owner);
 
     @Transactional
-    @Modifying
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("delete from NotificationDelivery d where d.status <> :status and d.updatedAt < :before")
     int deleteByStatusNotAndUpdatedAtBefore(@Param("status") DeliveryStatus status, @Param("before") Instant before);
 }

@@ -12,7 +12,7 @@ import java.util.UUID;
 public interface VisitRepository extends JpaRepository<Visit, UUID> {
 
     @Transactional
-    @Modifying
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("delete from Visit v where v.occurredAt < :before")
     int deleteOlderThan(@Param("before") Instant before);
 }
