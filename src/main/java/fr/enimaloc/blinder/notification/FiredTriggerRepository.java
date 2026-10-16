@@ -16,7 +16,7 @@ public interface FiredTriggerRepository extends JpaRepository<FiredTrigger, UUID
     Optional<FiredTrigger> findByLinkIdAndTriggerType(@Param("linkId") UUID linkId, @Param("type") TriggerType type);
 
     @Transactional
-    @Modifying
+    @Modifying(flushAutomatically = true)
     @Query("delete from FiredTrigger f where f.link.id = :linkId and f.triggerType in :types")
     int deleteByLinkIdAndTriggerTypeIn(@Param("linkId") UUID linkId, @Param("types") Collection<TriggerType> types);
 }
