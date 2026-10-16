@@ -164,7 +164,10 @@ class ApiAuthTest {
         mvc.perform(bearer(from(get(DOMAINS), ip), "bl_" + DeviceTokens.newToken()))
                 .andExpect(status().isTooManyRequests())
                 .andExpect(header().exists(HttpHeaders.RETRY_AFTER))
-                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON));
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.status").value(429))
+                .andExpect(jsonPath("$.title").value("Too Many Requests"))
+                .andExpect(jsonPath("$.detail").value("Trop de jetons refusés depuis cette adresse, réessayez plus tard"));
         mvc.perform(bearer(from(get(DOMAINS), ip), token))
                 .andExpect(status().isTooManyRequests())
                 .andExpect(header().exists(HttpHeaders.RETRY_AFTER));

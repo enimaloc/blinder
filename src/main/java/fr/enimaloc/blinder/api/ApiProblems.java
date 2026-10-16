@@ -2,12 +2,10 @@ package fr.enimaloc.blinder.api;
 
 import fr.enimaloc.blinder.common.FieldErrorException;
 import fr.enimaloc.blinder.common.StaleEditException;
-import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
-import org.springframework.http.MediaType;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -23,8 +21,6 @@ import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
 import tools.jackson.core.JacksonException;
 
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.TreeMap;
@@ -98,27 +94,14 @@ public class ApiProblems extends ResponseEntityExceptionHandler {
     }
 
     /** 401 de la chaîne API, avec le défi {@code WWW-Authenticate: Bearer}. */
-    public static AuthenticationEntryPoint unauthorized() {
+    public static AuthenticationEntryPoint unauthorized(ProblemWriter problems) {
         return (request, response, exception) -> {
             response.setHeader(HttpHeaders.WWW_AUTHENTICATE, "Bearer");
-            write(response, HttpStatus.UNAUTHORIZED, UNAUTHORIZED);
+            problems.write(response, HttpStatus.UNAUTHORIZED, UNAUTHORIZED);
         };
     }
 
-    public static AccessDeniedHandler forbidden() {
-        return (request, response, exception) -> write(response, HttpStatus.FORBIDDEN, "Accès refusé");
-    }
-
-    /** Écrit un problème hors de Spring MVC (filtres de sécurité) ; {@code detail} est un texte fixe. */
-    static void write(HttpServletResponse response, HttpStatus status, String detail) throws IOException {
-        response.setStatus(status.value());
-        response.setContentType(MediaType.APPLICATION_PROBLEM_JSON_VALUE);
-        response.setCharacterEncoding(StandardCharsets.UTF_8.name());
-        response.getWriter().write("{\"type\":\"about:blank\",\"title\":\"" + json(status.getReasonPhrase())
-                + "\",\"status\":" + status.value() + ",\"detail\":\"" + json(detail) + "\"}");
-    }
-
-    private static String json(String value) {
-        return value.replace("\\", "\\\\").replace("\"", "\\\"");
+    public static AccessDeniedHandler forbidden(ProblemWriter problems) {
+        return (request, response, exception) -> problems.write(response, HttpStatus.FORBIDDEN, "Accès refusé");
     }
 }

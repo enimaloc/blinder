@@ -3,6 +3,7 @@ package fr.enimaloc.blinder.security;
 import fr.enimaloc.blinder.api.ApiProblems;
 import fr.enimaloc.blinder.api.ApiRequestMatcher;
 import fr.enimaloc.blinder.api.ApiTokenFilter;
+import fr.enimaloc.blinder.api.ProblemWriter;
 import fr.enimaloc.blinder.api.token.ApiTokenService;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -22,6 +23,7 @@ import org.springframework.security.web.authentication.SimpleUrlAuthenticationSu
 import org.springframework.security.web.authentication.AnonymousAuthenticationFilter;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.security.web.context.RequestAttributeSecurityContextRepository;
+import org.springframework.security.web.context.SecurityContextRepository;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter;
 import java.io.IOException;
@@ -44,23 +46,24 @@ public class SecurityConfig {
          */
         @Bean
         @Order(0)
-        SecurityFilterChain apiChain(HttpSecurity http, ApiTokenService tokens, RateLimiters rateLimiters)
-                throws Exception {
+        SecurityFilterChain apiChain(HttpSecurity http, ApiTokenService tokens, RateLimiters rateLimiters,
+                                   ProblemWriter problems) throws Exception {
+            SecurityContextRepository contexts = new RequestAttributeSecurityContextRepository();
             http.securityMatcher(new ApiRequestMatcher())
-                    .addFilterBefore(new ApiTokenFilter(tokens, rateLimiters.apiAuth(), ApiProblems.unauthorized()),
+                    .addFilterBefore(new ApiTokenFilter(tokens, rateLimiters.apiAuth(),
+                                    ApiProblems.unauthorized(problems), problems, contexts),
                             AnonymousAuthenticationFilter.class)
                     .authorizeHttpRequests(auth -> auth.anyRequest().hasRole("ADMIN"))
                     .csrf(csrf -> csrf.disable())
                     .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                    .securityContext(context -> context
-                            .securityContextRepository(new RequestAttributeSecurityContextRepository()))
+                    .securityContext(context -> context.securityContextRepository(contexts))
                     .requestCache(cache -> cache.disable())
                     .formLogin(form -> form.disable())
                     .httpBasic(basic -> basic.disable())
                     .logout(logout -> logout.disable())
                     .exceptionHandling(errors -> errors
-                            .authenticationEntryPoint(ApiProblems.unauthorized())
-                            .accessDeniedHandler(ApiProblems.forbidden()));
+                            .authenticationEntryPoint(ApiProblems.unauthorized(problems))
+                            .accessDeniedHandler(ApiProblems.forbidden(problems)));
             return http.build();
         }
 

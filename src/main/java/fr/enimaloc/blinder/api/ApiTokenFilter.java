@@ -18,6 +18,7 @@ import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.context.SecurityContextHolderStrategy;
 import org.springframework.security.web.AuthenticationEntryPoint;
+import org.springframework.security.web.context.SecurityContextRepository;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
@@ -36,12 +37,17 @@ public class ApiTokenFilter extends OncePerRequestFilter {
     private final ApiTokenService tokens;
     private final RateLimiter failures;
     private final AuthenticationEntryPoint entryPoint;
+    private final ProblemWriter problems;
+    private final SecurityContextRepository repository;
     private final SecurityContextHolderStrategy contexts = SecurityContextHolder.getContextHolderStrategy();
 
-    public ApiTokenFilter(ApiTokenService tokens, RateLimiter failures, AuthenticationEntryPoint entryPoint) {
+    public ApiTokenFilter(ApiTokenService tokens, RateLimiter failures, AuthenticationEntryPoint entryPoint,
+                          ProblemWriter problems, SecurityContextRepository repository) {
         this.tokens = tokens;
         this.failures = failures;
         this.entryPoint = entryPoint;
+        this.problems = problems;
+        this.repository = repository;
     }
 
     @Override
@@ -68,12 +74,14 @@ public class ApiTokenFilter extends OncePerRequestFilter {
         context.setAuthentication(UsernamePasswordAuthenticationToken.authenticated(principal, null,
                 principal.getAuthorities()));
         contexts.setContext(context);
+        // Mémorisé dans la requête (dépôt de la chaîne) : un re-dispatch garde l'authentification.
+        repository.saveContext(context, request, response);
         chain.doFilter(request, response);
     }
 
-    private static void tooManyFailures(HttpServletResponse response, Duration retryAfter) throws IOException {
+    private void tooManyFailures(HttpServletResponse response, Duration retryAfter) throws IOException {
         RetryAfter.set(response, retryAfter);
-        ApiProblems.write(response, HttpStatus.TOO_MANY_REQUESTS,
+        problems.write(response, HttpStatus.TOO_MANY_REQUESTS,
                 "Trop de jetons refusés depuis cette adresse, réessayez plus tard");
     }
 }
