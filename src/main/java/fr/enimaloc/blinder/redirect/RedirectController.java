@@ -187,7 +187,8 @@ public class RedirectController {
     /** Formulaire de mot de passe : la cible n'apparaît jamais dans le modèle. */
     private static ModelAndView passwordPage(HttpServletRequest request, boolean rejected) {
         ModelAndView mv = new ModelAndView("public/password");
-        mv.addObject("action", request.getRequestURI());
+        String query = RedirectPolicy.withoutParameter(request.getQueryString(), "pw");
+        mv.addObject("action", request.getRequestURI() + (query == null ? "" : "?" + query));
         mv.addObject("rejected", rejected);
         mv.setStatus(HttpStatus.OK);
         return mv;

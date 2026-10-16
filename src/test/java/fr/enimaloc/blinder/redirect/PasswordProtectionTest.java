@@ -122,6 +122,19 @@ class PasswordProtectionTest {
     }
 
     @Test
+    void passwordFormKeepsTheForwardedQueryButNotTheAttempt() throws Exception {
+        link.setForwardQuery(true);
+        data.save(link);
+        mvc.perform(get("http://go.example.com/secret?utm=1&pw=wrong"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("action=\"/secret?utm=1\"")))
+                .andExpect(content().string(not(containsString("pw="))));
+        mvc.perform(post("http://go.example.com/secret?utm=1").with(csrf()).param("password", "open-sesame"))
+                .andExpect(status().isSeeOther())
+                .andExpect(redirectedUrl(TARGET + "?utm=1"));
+    }
+
+    @Test
     void formWithoutCsrfIsRejected() throws Exception {
         mvc.perform(post("http://go.example.com/secret").param("password", "open-sesame"))
                 .andExpect(status().isForbidden());

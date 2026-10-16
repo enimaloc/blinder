@@ -72,6 +72,32 @@ public final class RedirectPolicy {
         return out.append(fragment).toString();
     }
 
+    /** Query string brute sans les paramètres nommés (ordre et encodage des autres conservés) ; null si vide. */
+    public static String withoutParameter(String rawQuery, String name) {
+        if (rawQuery == null) {
+            return null;
+        }
+        StringBuilder out = new StringBuilder();
+        for (String pair : rawQuery.split("&")) {
+            if (pair.isEmpty()) {
+                continue;
+            }
+            int equals = pair.indexOf('=');
+            String raw = equals < 0 ? pair : pair.substring(0, equals);
+            String decoded;
+            try {
+                decoded = URLDecoder.decode(raw, StandardCharsets.UTF_8);
+            } catch (IllegalArgumentException e) {
+                decoded = raw;
+            }
+            if (decoded.equals(name)) {
+                continue;
+            }
+            out.append(out.isEmpty() ? "" : "&").append(pair);
+        }
+        return out.isEmpty() ? null : out.toString();
+    }
+
     private static Set<String> parameterNames(String base) {
         int question = base.indexOf('?');
         if (question < 0) {
