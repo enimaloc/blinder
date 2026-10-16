@@ -101,8 +101,8 @@ public class DeliveryService {
             return false;
         }
         if (!triggerLocks.acquireForTransaction(link.getId(), event)) {
-            log.warn("Déclencheur {} du lien {} toujours verrouillé, il sera réévalué par le scanner périodique"
-                    + " (sauf DENIALS : alerte non rejouée)", event, link.getId());
+            log.warn("Déclencheur {} du lien {} toujours verrouillé, il sera réévalué par le scanner périodique",
+                    event, link.getId());
             return false;
         }
         if (fired.findByLinkIdAndTriggerType(link.getId(), event).isPresent()) {

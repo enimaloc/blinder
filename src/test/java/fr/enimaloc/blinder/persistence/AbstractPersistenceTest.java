@@ -547,6 +547,44 @@ abstract class AbstractPersistenceTest {
     }
 
     @Test
+    void pendingOnceTriggerQueriesSelectEnabledLinksWithActiveChannelAndNoFiredTrigger() {
+        NotificationChannel active = data.channel(owner, "Actif", ChannelType.WEBHOOK, "https://hooks.example/a");
+        NotificationChannel off = data.channel(owner, "Coupé", ChannelType.WEBHOOK, "https://hooks.example/b");
+        off.setEnabled(false);
+        channels.saveAndFlush(off);
+
+        Link ok = pendingLink("ok", active, true);
+        pendingLink("nochan", off, true);
+        pendingLink("disabled", active, false);
+        Link fired = pendingLink("fired", active, true);
+        firedTriggers.saveAndFlush(new FiredTrigger(links.getReferenceById(fired.getId()), TriggerType.EXPIRED));
+        firedTriggers.saveAndFlush(new FiredTrigger(links.getReferenceById(fired.getId()), TriggerType.EXHAUSTED));
+        firedTriggers.saveAndFlush(new FiredTrigger(links.getReferenceById(fired.getId()), TriggerType.THRESHOLD));
+
+        assertThat(settingsRepository.findByOnExpiredTrue()).extracting(s -> s.getLink().getId())
+                .containsExactly(ok.getId());
+        assertThat(settingsRepository.findExhaustedPending()).extracting(s -> s.getLink().getId())
+                .containsExactly(ok.getId());
+        assertThat(settingsRepository.findThresholdPending()).extracting(s -> s.getLink().getId())
+                .containsExactly(ok.getId());
+    }
+
+    private Link pendingLink(String slug, NotificationChannel channel, boolean enabled) {
+        Link link = new Link(domain, slug, "https://example.com", owner);
+        link.setMaxUses(1);
+        link.setUseCount(1);
+        link.setEnabled(enabled);
+        link = data.save(link);
+        LinkNotificationSettings settings = new LinkNotificationSettings(links.getReferenceById(link.getId()));
+        settings.setOnExpired(true);
+        settings.setOnExhausted(true);
+        settings.setVisitThreshold(1);
+        settings.setChannels(new java.util.HashSet<>(Set.of(channel)));
+        settingsRepository.saveAndFlush(settings);
+        return link;
+    }
+
+    @Test
     void deletingALinkCascadesStatsAndSettings() {
         Link link = data.link(domain, "casc", "https://example.com");
         Link ref = links.getReferenceById(link.getId());

@@ -118,7 +118,7 @@ class TriggerLockWaitTest {
         Duration waited = Duration.ofNanos(System.nanoTime() - start);
         release.run();
 
-        assertThat(waited).isLessThan(Duration.ofSeconds(5));
+        assertThat(waited).isLessThan(Duration.ofSeconds(2));
         assertThat(sent(TriggerType.EXHAUSTED)).isEmpty();
 
         scanner.scan(NOW);

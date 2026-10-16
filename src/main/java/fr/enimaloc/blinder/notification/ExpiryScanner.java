@@ -10,6 +10,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -34,8 +35,21 @@ public class ExpiryScanner {
     }
 
     void scan(Instant now) {
-        reevaluate(TriggerType.EXHAUSTED, settings.findExhaustedPending(), now);
-        reevaluate(TriggerType.THRESHOLD, settings.findThresholdPending(), now);
+        phase("épuisement", () -> reevaluate(TriggerType.EXHAUSTED, settings.findExhaustedPending(), now));
+        phase("seuil de visites", () -> reevaluate(TriggerType.THRESHOLD, settings.findThresholdPending(), now));
+        phase("expiration", () -> scanExpired(now));
+    }
+
+    /** Une phase en échec (requête comprise) n'empêche pas les suivantes. */
+    private void phase(String name, Runnable phase) {
+        try {
+            phase.run();
+        } catch (RuntimeException e) {
+            log.error("Réévaluation des notifications ({}) en échec", name, e);
+        }
+    }
+
+    private void scanExpired(Instant now) {
         for (LinkNotificationSettings s : settings.findByOnExpiredTrue()) {
             UUID linkId = s.getLink().getId();
             if (!isExpired(s.getLink(), now)) {
@@ -49,7 +63,7 @@ public class ExpiryScanner {
         }
     }
 
-    private void reevaluate(TriggerType type, java.util.List<LinkNotificationSettings> pending, Instant now) {
+    private void reevaluate(TriggerType type, List<LinkNotificationSettings> pending, Instant now) {
         for (LinkNotificationSettings s : pending) {
             UUID linkId = s.getLink().getId();
             try {

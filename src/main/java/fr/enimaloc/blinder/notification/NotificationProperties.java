@@ -8,14 +8,14 @@ import org.springframework.validation.annotation.Validated;
 
 import java.time.Duration;
 
-@Validated
-@ConfigurationProperties("blinder.notifications")
 /**
  * @param mailFrom        expéditeur des e-mails
  * @param denials         alerte de refus répétés
  * @param triggerLockWait attente maximale du verrou d'un déclencheur « une seule fois » ; au-delà l'alerte est
  *                        reportée au passage suivant du scanner périodique
  */
+@Validated
+@ConfigurationProperties("blinder.notifications")
 public record NotificationProperties(
         @DefaultValue("blinder@localhost") String mailFrom,
         @DefaultValue @Valid Denials denials,
