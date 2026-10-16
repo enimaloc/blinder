@@ -185,8 +185,6 @@ Tout autre changement (cible, tags, métadonnées, protections…) ne réarme ri
 | `blinder.notifications.denials.cooldown` | `1h` | Silence après une alerte de refus |
 | `blinder.scheduling.enabled` | `true` | Active les tâches planifiées (purge, envois, expiration) |
 | `spring.mail.*` | vide | Serveur SMTP |
-| `blinder.rate-limit.api-auth.max-failures` | `20` | Jetons d'API refusés par IP avant le 429 |
-| `blinder.rate-limit.api-auth.window` | `15m` | Fenêtre de comptage des jetons refusés |
 
 ## Tags
 
@@ -239,18 +237,27 @@ Un en-tête absent, mal formé ou un jeton inconnu donne un 401 avec
 (`blinder.rate-limit.api-auth.max-failures` et `.window`), l'API répond 429 avec
 `Retry-After`, même pour un jeton valide ; un succès ne remet pas le compteur à zéro.
 
+| Propriété | Défaut | Rôle |
+|---|---|---|
+| `blinder.rate-limit.api-auth.max-failures` | `20` | Jetons d'API refusés par IP avant le 429 |
+| `blinder.rate-limit.api-auth.window` | `15m` | Fenêtre de comptage des jetons refusés |
+
 ### Erreurs
 
 Les erreurs sont des `application/problem+json` (RFC 9457) :
 
 ```json
 {"type":"about:blank","title":"Bad Request","status":400,"detail":"Données invalides",
- "errors":{"targetUrl":"URL http(s) absolue requise"}}
+ "instance":"/_/api/v1/links","errors":{"targetUrl":"URL http(s) absolue requise"}}
 ```
+
+`instance` est absent des 401 et 429, écrits avant d'atteindre l'API.
 
 - 400 : valeur invalide (`errors` donne un message par champ), corps illisible,
   identifiant invalide ou inconnu **dans le corps JSON** (domaine, canal, appareil) ;
-  un slug déjà pris donne `errors.slug`.
+  un slug déjà pris donne `errors.slug` ; un champ inconnu (faute de frappe) donne
+  `errors.<champ>` = « Champ inconnu » (les champs en lecture seule d'une représentation
+  lue sont ignorés).
 - 401 / 429 : voir ci-dessus.
 - 404 : identifiant inconnu ou appartenant à un autre propriétaire **dans le chemin ou
   la requête** (`/links/{id}`, `?tag=`, `?domain=`, `?link=`...).
@@ -300,7 +307,7 @@ curl -H "Authorization: Bearer $TOKEN" "$BLINDER/links?tag=$TAG_ID&q=promo&size=
   "hasPassword": false,
   "ipAllowlist": [], "deviceProtected": false, "deviceIds": [],
   "redirectStatus": 302, "forwardQuery": false,
-  "interstitial": false, "interstitialSeconds": 3,
+  "interstitial": false, "interstitialSeconds": 0,
   "metaMode": "NONE", "metaTitle": null, "metaDescription": null, "metaImageUrl": null,
   "tags": ["campagne"],
   "notifications": {"exhausted": true, "expired": false, "denials": false,
