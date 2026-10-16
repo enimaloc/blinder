@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="fr" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{admin/fragments :: head('Compte')}"></head>
+<body>
+<nav th:replace="~{admin/fragments :: nav}"></nav>
+<main>
+    <h1 th:text="'Compte ' + ${username}">Compte</h1>
+    <p class="notice" th:if="${param.changed}">Mot de passe modifié.</p>
+    <form th:object="${form}" th:action="@{/_/account/password}" method="post">
+        <label for="currentPassword">Mot de passe actuel</label>
+        <input id="currentPassword" type="password" th:field="*{currentPassword}" autocomplete="current-password">
+        <p class="error" th:errors="*{currentPassword}"></p>
+        <label for="newPassword">Nouveau mot de passe (12 caractères min.)</label>
+        <input id="newPassword" type="password" th:field="*{newPassword}" autocomplete="new-password">
+        <p class="error" th:errors="*{newPassword}"></p>
+        <label for="confirmPassword">Confirmation</label>
+        <input id="confirmPassword" type="password" th:field="*{confirmPassword}" autocomplete="new-password">
+        <p class="error" th:errors="*{confirmPassword}"></p>
+        <p><button type="submit">Changer le mot de passe</button></p>
+    </form>
+</main>
+</body>
+</html>

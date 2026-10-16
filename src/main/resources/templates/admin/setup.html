@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="fr" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{admin/fragments :: head('Installation')}"></head>
+<body>
+<main>
+    <h1>Installation de Blinder</h1>
+    <p class="notice">Le jeton d'installation est affiché dans les logs du serveur.</p>
+    <form th:object="${form}" th:action="@{/_/setup}" method="post">
+        <label for="token">Jeton d'installation</label>
+        <input id="token" th:field="*{token}" autocomplete="off" required>
+        <p class="error" th:errors="*{token}"></p>
+        <label for="username">Identifiant administrateur</label>
+        <input id="username" th:field="*{username}" autocomplete="username" required>
+        <p class="error" th:errors="*{username}"></p>
+        <label for="password">Mot de passe (12 caractères min.)</label>
+        <input id="password" type="password" th:field="*{password}" autocomplete="new-password" required>
+        <p class="error" th:errors="*{password}"></p>
+        <label for="passwordConfirm">Confirmation</label>
+        <input id="passwordConfirm" type="password" th:field="*{passwordConfirm}" autocomplete="new-password" required>
+        <p class="error" th:errors="*{passwordConfirm}"></p>
+        <label for="host">Premier domaine de redirection</label>
+        <input id="host" th:field="*{host}" required>
+        <p class="error" th:errors="*{host}"></p>
+        <p><button type="submit">Créer le compte</button></p>
+    </form>
+</main>
+</body>
+</html>

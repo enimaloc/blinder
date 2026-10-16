@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="fr" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{admin/fragments :: head('Connexion')}"></head>
+<body>
+<main>
+    <h1>Connexion</h1>
+    <p class="error" th:if="${param.error}">Identifiants invalides.</p>
+    <p class="notice" th:if="${param.logout}">Vous êtes déconnecté.</p>
+    <p class="notice" th:if="${param.setup}">Installation terminée, connectez-vous.</p>
+    <form th:action="@{/_/login}" method="post">
+        <label for="username">Identifiant</label>
+        <input id="username" name="username" autocomplete="username" required autofocus>
+        <label for="password">Mot de passe</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" required>
+        <p><button type="submit">Se connecter</button></p>
+    </form>
+</main>
+</body>
+</html>

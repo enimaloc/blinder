@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="fr" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{admin/fragments :: head('Liens')}"></head>
+<body>
+<nav th:replace="~{admin/fragments :: nav}"></nav>
+<main>
+    <h1>Liens</h1>
+    <p th:if="${domains.isEmpty()}" class="notice">
+        Ajoutez d'abord un <a th:href="@{/_/domains/new}">domaine</a>.
+    </p>
+    <p th:unless="${domains.isEmpty()}"><a th:href="@{/_/links/new}">Nouveau lien</a></p>
+    <form method="get" th:action="@{/_/}" th:unless="${domains.isEmpty()}">
+        <label for="domain">Filtrer par domaine</label>
+        <select id="domain" name="domain" onchange="this.form.submit()">
+            <option value="">Tous</option>
+            <option th:each="d : ${domains}" th:value="${d.id}" th:text="${d.host}"
+                    th:selected="${d.id == selectedDomain}"></option>
+        </select>
+    </form>
+    <table>
+        <tr><th>Lien</th><th>Cible</th><th>État</th><th>Utilisations</th></tr>
+        <tr th:each="row : ${rows}">
+            <td><a th:href="@{/_/links/{id}(id=${row.link.id})}"
+                   th:text="${row.link.domain.host} + '/' + ${row.link.slug}"></a></td>
+            <td th:text="${row.link.targetUrl}"></td>
+            <td><span th:class="'badge badge-' + ${#strings.toLowerCase(row.status.name())}"
+                      th:text="${row.status.label()}"></span></td>
+            <td th:text="${row.link.maxUses == null} ? ${row.link.useCount} : ${row.link.useCount} + ' / ' + ${row.link.maxUses}"></td>
+        </tr>
+    </table>
+</main>
+</body>
+</html>

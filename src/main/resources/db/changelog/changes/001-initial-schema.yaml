@@ -1,0 +1,56 @@
+databaseChangeLog:
+  # Liquibase maps generic timestamp/datetime to TEXT on SQLite, which Hibernate validation rejects;
+  # a parameterised type is kept verbatim and reported as TIMESTAMP by sqlite-jdbc. First matching property wins.
+  - property: { name: timestamp.type, value: "TIMESTAMP(6)", dbms: sqlite }
+  - property: { name: timestamp.type, value: timestamp }
+  - changeSet:
+      id: 001-initial-schema
+      author: blinder
+      changes:
+        - createTable:
+            tableName: users
+            columns:
+              - column: { name: id, type: char(36), constraints: { primaryKey: true, nullable: false } }
+              - column: { name: created_at, type: "${timestamp.type}", constraints: { nullable: false } }
+              - column: { name: updated_at, type: "${timestamp.type}", constraints: { nullable: false } }
+              - column: { name: version, type: bigint, constraints: { nullable: false } }
+              - column: { name: username, type: varchar(64), constraints: { nullable: false, unique: true, uniqueConstraintName: uk_users_username } }
+              - column: { name: password_hash, type: varchar(255), constraints: { nullable: false } }
+              - column: { name: role, type: varchar(16), constraints: { nullable: false } }
+        - createTable:
+            tableName: domains
+            columns:
+              - column: { name: id, type: char(36), constraints: { primaryKey: true, nullable: false } }
+              - column: { name: created_at, type: "${timestamp.type}", constraints: { nullable: false } }
+              - column: { name: updated_at, type: "${timestamp.type}", constraints: { nullable: false } }
+              - column: { name: version, type: bigint, constraints: { nullable: false } }
+              - column: { name: host, type: varchar(253), constraints: { nullable: false, unique: true, uniqueConstraintName: uk_domains_host } }
+              - column: { name: owner_id, type: char(36), constraints: { nullable: false, foreignKeyName: fk_domains_owner, references: users(id) } }
+              - column: { name: enabled, type: boolean, constraints: { nullable: false } }
+              - column: { name: not_found_url, type: varchar(2048) }
+        - createTable:
+            tableName: links
+            columns:
+              - column: { name: id, type: char(36), constraints: { primaryKey: true, nullable: false } }
+              - column: { name: created_at, type: "${timestamp.type}", constraints: { nullable: false } }
+              - column: { name: updated_at, type: "${timestamp.type}", constraints: { nullable: false } }
+              - column: { name: version, type: bigint, constraints: { nullable: false } }
+              - column: { name: domain_id, type: char(36), constraints: { nullable: false, foreignKeyName: fk_links_domain, references: domains(id) } }
+              - column: { name: slug, type: varchar(64), constraints: { nullable: false } }
+              - column: { name: target_url, type: varchar(2048), constraints: { nullable: false } }
+              - column: { name: owner_id, type: char(36), constraints: { nullable: false, foreignKeyName: fk_links_owner, references: users(id) } }
+              - column: { name: enabled, type: boolean, constraints: { nullable: false } }
+              - column: { name: not_before, type: "${timestamp.type}" }
+              - column: { name: expires_at, type: "${timestamp.type}" }
+              - column: { name: ttl_after_first_use_seconds, type: bigint }
+              - column: { name: first_used_at, type: "${timestamp.type}" }
+              - column: { name: max_uses, type: int }
+              - column: { name: use_count, type: int, defaultValueNumeric: 0, constraints: { nullable: false } }
+              - column: { name: denied_url, type: varchar(2048) }
+        - createIndex:
+            tableName: links
+            indexName: uk_links_domain_slug
+            unique: true
+            columns:
+              - column: { name: domain_id }
+              - column: { name: slug }
