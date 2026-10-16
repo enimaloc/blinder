@@ -38,12 +38,19 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Instant;
+import java.util.List;
 
 @TestComponent
 @RequiredArgsConstructor
 public class TestData {
 
     public static final String PASSWORD = "correct-horse-battery";
+
+    /**
+     * Tables de jointure sans entité propre, vidées par requête native dans {@link #reset()} (avant {@code links},
+     * {@code tags} et {@code devices} qu'elles référencent). Liste unique : à compléter si une jointure est ajoutée.
+     */
+    private static final List<String> JOIN_TABLES = List.of("link_tags", "link_devices");
 
     private final UserRepository users;
     private final DomainRepository domains;
@@ -78,8 +85,7 @@ public class TestData {
         deviceEnrollments.deleteAllInBatch();
         apiTokens.deleteAllInBatch();
         // Liaisons link_tags (et appareils autorisés) par requête native : plus besoin de charger chaque lien.
-        jdbc.update("delete from link_tags");
-        jdbc.update("delete from link_devices");
+        JOIN_TABLES.forEach(table -> jdbc.update("delete from " + table));
         links.deleteAllInBatch();
         tags.deleteAllInBatch();
         devices.deleteAllInBatch();
