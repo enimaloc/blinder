@@ -97,6 +97,9 @@ public class ChannelService {
             if (!UrlPolicy.isHttpUrl(target) || !hasHost(target)) {
                 throw new FieldErrorException("target", "URL http(s) absolue requise");
             }
+            if (hasUserInfo(target)) {
+                throw new FieldErrorException("target", "Les identifiants dans l'URL ne sont pas autorisés");
+            }
         } else {
             try {
                 new InternetAddress(target, true).validate();
@@ -105,6 +108,14 @@ public class ChannelService {
             }
         }
         return target;
+    }
+
+    private static boolean hasUserInfo(String url) {
+        try {
+            return new URI(url).getRawUserInfo() != null;
+        } catch (URISyntaxException e) {
+            return true;
+        }
     }
 
     private static boolean hasHost(String url) {

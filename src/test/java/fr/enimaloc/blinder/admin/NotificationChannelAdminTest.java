@@ -79,6 +79,14 @@ class NotificationChannelAdminTest {
     }
 
     @Test
+    void rejectsWebhookUrlWithUserInfo() throws Exception {
+        mvc.perform(create("WEBHOOK", "https://user:pw@example.com/x"))
+                .andExpect(status().isOk())
+                .andExpect(model().attributeHasFieldErrors("form", "target"));
+        assertThat(channels.findAll()).isEmpty();
+    }
+
+    @Test
     void rejectsInvalidEmail() throws Exception {
         mvc.perform(create("EMAIL", "pas-un-mail"))
                 .andExpect(status().isOk())

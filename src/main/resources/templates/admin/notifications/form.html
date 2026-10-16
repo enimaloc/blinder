@@ -25,6 +25,9 @@
         <label><input type="checkbox" th:field="*{enabled}"> Actif</label>
         <p><button type="submit">Enregistrer</button></p>
     </form>
+    <form th:if="${channelId != null}" th:action="@{/_/notifications/channels/{id}/test(id=${channelId})}" method="post">
+        <button type="submit">Envoyer un test</button>
+    </form>
     <section th:if="${channelId != null and secret != null}">
         <h2>Secret du webhook</h2>
         <p><code th:text="${secret}"></code></p>

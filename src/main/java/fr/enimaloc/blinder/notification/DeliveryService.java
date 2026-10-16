@@ -9,6 +9,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.http.HttpStatus;
 
+import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -23,6 +24,7 @@ public class DeliveryService {
     private final NotificationDeliveryRepository deliveries;
     private final FiredTriggerRepository fired;
     private final NotificationPayloads payloads;
+    private final Clock clock;
 
     @Transactional
     public void enqueue(Link link, TriggerType event, Visit visitOrNull, Instant now) {
@@ -55,9 +57,29 @@ public class DeliveryService {
     public void enqueueTest(User owner, UUID channelId) {
         NotificationChannel channel = channels.findByIdAndOwner(channelId, owner)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
-        Instant now = Instant.now();
+        Instant now = Instant.now(clock);
         deliveries.save(new NotificationDelivery(owner, channel, null, "test", TriggerType.TEST,
                 payloads.json(TriggerType.TEST, now, null, null), now));
+    }
+
+    /** Remet un envoi échoué en file, dû immédiatement. 404 si autre propriétaire ; seulement {@code FAILED}. */
+    @Transactional
+    public void retry(User owner, UUID deliveryId) {
+        NotificationDelivery delivery = deliveries.findByIdAndOwner(deliveryId, owner)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+        if (delivery.getStatus() != DeliveryStatus.FAILED) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT);
+        }
+        delivery.setStatus(DeliveryStatus.PENDING);
+        delivery.setAttempts(0);
+        delivery.setNextAttemptAt(Instant.now(clock));
+    }
+
+    @Transactional(readOnly = true)
+    public List<NotificationDelivery> recent(User owner) {
+        List<NotificationDelivery> found = deliveries.findTop100ByOwnerOrderByCreatedAtDesc(owner);
+        found.forEach(d -> d.getChannel().getName());
+        return found;
     }
 
     /** « Une seule fois » : enregistre le déclencheur puis envoie ; {@code false} s'il avait déjà été déclenché. */
