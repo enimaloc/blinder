@@ -1,0 +1,57 @@
+databaseChangeLog:
+  - changeSet:
+      id: 002-protection
+      author: blinder
+      changes:
+        - addColumn:
+            tableName: links
+            columns:
+              - column: { name: password_hash, type: varchar(255) }
+              - column: { name: ip_allowlist, type: varchar(4000) }
+        - createTable:
+            tableName: devices
+            columns:
+              - column: { name: id, type: char(36), constraints: { primaryKey: true, nullable: false } }
+              - column: { name: created_at, type: "${timestamp.type}", constraints: { nullable: false } }
+              - column: { name: updated_at, type: "${timestamp.type}", constraints: { nullable: false } }
+              - column: { name: version, type: bigint, constraints: { nullable: false } }
+              - column: { name: owner_id, type: char(36), constraints: { nullable: false, foreignKeyName: fk_devices_owner, references: users(id) } }
+              - column: { name: name, type: varchar(64), constraints: { nullable: false } }
+              - column: { name: last_seen_at, type: "${timestamp.type}" }
+              - column: { name: sync_ticket_hash, type: varchar(64) }
+              - column: { name: sync_expires_at, type: "${timestamp.type}" }
+        - createTable:
+            tableName: device_credentials
+            columns:
+              - column: { name: id, type: char(36), constraints: { primaryKey: true, nullable: false } }
+              - column: { name: created_at, type: "${timestamp.type}", constraints: { nullable: false } }
+              - column: { name: updated_at, type: "${timestamp.type}", constraints: { nullable: false } }
+              - column: { name: version, type: bigint, constraints: { nullable: false } }
+              - column: { name: device_id, type: char(36), constraints: { nullable: false, foreignKeyName: fk_device_credentials_device, references: devices(id), deleteCascade: true } }
+              - column: { name: domain_id, type: char(36), constraints: { nullable: false, foreignKeyName: fk_device_credentials_domain, references: domains(id), deleteCascade: true } }
+              - column: { name: secret_hash, type: varchar(64), constraints: { nullable: false } }
+        - createIndex:
+            tableName: device_credentials
+            indexName: uk_device_credentials_device_domain
+            unique: true
+            columns:
+              - column: { name: device_id }
+              - column: { name: domain_id }
+        - createTable:
+            tableName: device_enrollments
+            columns:
+              - column: { name: id, type: char(36), constraints: { primaryKey: true, nullable: false } }
+              - column: { name: created_at, type: "${timestamp.type}", constraints: { nullable: false } }
+              - column: { name: updated_at, type: "${timestamp.type}", constraints: { nullable: false } }
+              - column: { name: version, type: bigint, constraints: { nullable: false } }
+              - column: { name: owner_id, type: char(36), constraints: { nullable: false, foreignKeyName: fk_device_enrollments_owner, references: users(id) } }
+              - column: { name: start_domain_id, type: char(36), constraints: { nullable: false, foreignKeyName: fk_device_enrollments_domain, references: domains(id), deleteCascade: true } }
+              - column: { name: name, type: varchar(64), constraints: { nullable: false } }
+              - column: { name: token_hash, type: varchar(64), constraints: { nullable: false, unique: true, uniqueConstraintName: uk_device_enrollments_token } }
+              - column: { name: expires_at, type: "${timestamp.type}", constraints: { nullable: false } }
+              - column: { name: used_at, type: "${timestamp.type}" }
+        - createTable:
+            tableName: link_devices
+            columns:
+              - column: { name: link_id, type: char(36), constraints: { nullable: false, primaryKey: true, primaryKeyName: pk_link_devices, foreignKeyName: fk_link_devices_link, references: links(id), deleteCascade: true } }
+              - column: { name: device_id, type: char(36), constraints: { nullable: false, primaryKey: true, primaryKeyName: pk_link_devices, foreignKeyName: fk_link_devices_device, references: devices(id), deleteCascade: true } }
