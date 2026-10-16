@@ -49,6 +49,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.time.Duration;
+import java.io.StringWriter;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.Set;
@@ -92,6 +93,9 @@ abstract class AbstractPersistenceTest {
     FiredTriggerRepository firedTriggers;
     @Autowired
     NotificationDeliveryRepository deliveries;
+
+    @Autowired
+    fr.enimaloc.blinder.stats.StatsQuery statsQuery;
 
     @Autowired
     PlatformTransactionManager transactionManager;
@@ -538,5 +542,25 @@ abstract class AbstractPersistenceTest {
 
         assertThat(deleted).isEqualTo(1);
         assertThat(visits.findAll()).extracting(Visit::getId).containsExactly(recent.getId());
+    }
+
+    @Test
+    void statsQueriesRunOnThisDatabase() {
+        Link link = data.link(domain, "stats", "https://example.com");
+        Instant now = Instant.now().minusSeconds(60);
+        data.visit(link, VisitOutcome.REDIRECTED, now, "203.0.113.1");
+        data.visit(link, VisitOutcome.DENIED, now, "203.0.113.1");
+        var period = fr.enimaloc.blinder.stats.StatsPeriod.D7;
+
+        assertThat(statsQuery.totals(owner, null, period).total()).isEqualTo(2);
+        assertThat(statsQuery.totals(owner, link.getId(), period).uniqueIps()).isEqualTo(1);
+        assertThat(statsQuery.topCountries(owner, null, period)).hasSize(1);
+        assertThat(statsQuery.topReferers(owner, link.getId(), period)).hasSize(1);
+        assertThat(statsQuery.topLinks(owner, period)).hasSize(1);
+        assertThat(statsQuery.recent(owner, null, period, 50)).hasSize(2);
+        assertThat(statsQuery.daily(owner, link.getId(), period)).hasSize(7);
+        StringWriter csv = new StringWriter();
+        statsQuery.exportCsv(owner, null, period, csv);
+        assertThat(csv.toString().split("\r\n")).hasSize(3);
     }
 }

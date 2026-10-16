@@ -19,7 +19,7 @@
         </select>
     </form>
     <table>
-        <tr><th>Lien</th><th>Cible</th><th>État</th><th>Utilisations</th></tr>
+        <tr><th>Lien</th><th>Cible</th><th>État</th><th>Utilisations</th><th></th></tr>
         <tr th:each="row : ${rows}">
             <td><a th:href="@{/_/links/{id}(id=${row.link.id})}"
                    th:text="${row.link.domain.host} + '/' + ${row.link.slug}"></a></td>
@@ -27,6 +27,7 @@
             <td><span th:class="'badge badge-' + ${#strings.toLowerCase(row.status.name())}"
                       th:text="${row.status.label()}"></span></td>
             <td th:text="${row.link.maxUses == null} ? ${row.link.useCount} : ${row.link.useCount} + ' / ' + ${row.link.maxUses}"></td>
+            <td><a th:href="@{/_/links/{id}/stats(id=${row.link.id})}">Stats</a></td>
         </tr>
     </table>
 </main>

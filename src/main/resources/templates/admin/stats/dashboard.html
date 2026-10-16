@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="fr" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{admin/fragments :: head('Statistiques')}"></head>
+<body>
+<nav th:replace="~{admin/fragments :: nav}"></nav>
+<main>
+    <h1 th:if="${link == null}">Statistiques</h1>
+    <h1 th:if="${link != null}">Statistiques · <span th:text="${link.domain.host} + '/' + ${link.slug}"></span></h1>
+    <p class="period">
+        <th:block th:each="p : ${periods}">
+            <strong th:if="${p == view.period}" th:text="${p.days()} + ' j'"></strong>
+            <a th:unless="${p == view.period}" th:href="@{${basePath}(days=${p.days()})}" th:text="${p.days()} + ' j'"></a>
+        </th:block>
+        · <a th:href="@{${basePath} + '.csv'(days=${view.period.days()})}">Exporter en CSV</a>
+        <th:block th:if="${link != null}"> · <a th:href="@{/_/links/{id}(id=${link.id})}">Modifier le lien</a></th:block>
+    </p>
+    <p class="notice" th:if="${view.exceedsRetention()}">
+        Les visites détaillées sont conservées moins longtemps que cette période : les totaux, tops et visites
+        récentes ne couvrent que la durée de conservation. La courbe journalière reste complète.
+    </p>
+    <p class="notice" th:if="${dropped > 0}" th:text="${dropped} + ' visite(s) perdue(s) depuis le démarrage (file saturée ou erreur d''écriture).'"></p>
+
+    <div class="cards">
+        <div class="card"><span class="muted">Visites</span><strong th:text="${view.totals.total()}">0</strong></div>
+        <div class="card"><span class="muted">Redirigées</span><strong th:text="${view.totals.byOutcome().getOrDefault(T(fr.enimaloc.blinder.stats.VisitOutcome).REDIRECTED, 0L)}">0</strong></div>
+        <div class="card"><span class="muted">Visiteurs uniques (IP)</span><strong th:text="${view.totals.uniqueIps()}">0</strong></div>
+        <div class="card"><span class="muted">Bots</span><strong th:text="${view.totals.total() == 0} ? '0 %' : ${view.totals.bots() * 100 / view.totals.total()} + ' %'">0 %</strong></div>
+    </div>
+
+    <h2>Par issue</h2>
+    <ul class="plain">
+        <li th:each="e : ${view.totals.byOutcome()}"><span th:text="${e.key}"></span> : <span th:text="${e.value}"></span></li>
+        <li th:if="${view.totals.byOutcome().isEmpty()}" class="notice">Aucune visite.</li>
+    </ul>
+
+    <h2>Visites par jour</h2>
+    <div class="chart"><canvas id="daily" role="img" aria-label="Visites par jour"></canvas></div>
+
+    <div class="tops">
+        <section th:replace="~{admin/stats/top :: top('Pays', ${view.countries()})}"></section>
+        <section th:replace="~{admin/stats/top :: top('Referers', ${view.referers()})}"></section>
+        <section th:replace="~{admin/stats/top :: top('Navigateurs', ${view.browsers()})}"></section>
+        <section th:replace="~{admin/stats/top :: top('Systèmes', ${view.oss()})}"></section>
+        <section th:replace="~{admin/stats/top :: top('Liens', ${view.links()})}"></section>
+    </div>
+
+    <h2>Dernières visites</h2>
+    <table>
+        <tr><th>Date</th><th th:if="${link == null}">Lien</th><th>Issue</th><th>IP</th><th>Pays</th><th>Navigateur</th><th>Referer</th></tr>
+        <tr th:each="v : ${view.recent()}">
+            <td th:text="${#temporals.format(v.occurredAt(), 'dd/MM/yyyy HH:mm:ss')}"></td>
+            <td th:if="${link == null}" th:text="${v.domain()} + '/' + ${v.slug()}"></td>
+            <td th:text="${v.outcome()}"></td>
+            <td th:text="${v.ip()}"></td>
+            <td th:text="${v.country()}"></td>
+            <td th:text="${v.browser()}"></td>
+            <td th:text="${v.refererHost()}"></td>
+        </tr>
+        <tr th:if="${view.recent().isEmpty()}"><td colspan="7" class="notice">Aucune visite sur la période.</td></tr>
+    </table>
+</main>
+<script th:src="@{/_/vendor/chart.js/4.5.1/dist/chart.umd.js}"></script>
+<script th:inline="javascript">
+    const data = /*[[${chart}]]*/ {labels: [], redirected: [], refused: [], other: []};
+    new Chart(document.getElementById('daily'), {
+        type: 'line',
+        data: {
+            labels: data.labels,
+            datasets: [
+                {label: 'Redirigées', data: data.redirected, borderColor: '#2563eb', tension: .2},
+                {label: 'Refusées', data: data.refused, borderColor: '#b91c1c', tension: .2},
+                {label: 'Autres', data: data.other, borderColor: '#6b7280', tension: .2}
+            ]
+        },
+        options: {maintainAspectRatio: false, scales: {y: {beginAtZero: true, ticks: {precision: 0}}}}
+    });
+</script>
+</body>
+</html>

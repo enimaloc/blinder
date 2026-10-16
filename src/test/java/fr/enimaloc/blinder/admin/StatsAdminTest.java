@@ -1,0 +1,121 @@
+package fr.enimaloc.blinder.admin;
+
+import fr.enimaloc.blinder.link.Link;
+import fr.enimaloc.blinder.link.LinkRepository;
+import fr.enimaloc.blinder.stats.Visit;
+import fr.enimaloc.blinder.stats.VisitOutcome;
+import fr.enimaloc.blinder.stats.VisitRepository;
+import fr.enimaloc.blinder.support.TestData;
+import fr.enimaloc.blinder.user.BlinderUserDetails;
+import fr.enimaloc.blinder.user.User;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.context.annotation.Import;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.request.RequestPostProcessor;
+
+import java.time.Duration;
+import java.time.Instant;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.containsString;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+@SpringBootTest
+@AutoConfigureMockMvc
+@Import(TestData.class)
+class StatsAdminTest {
+
+    @Autowired
+    MockMvc mvc;
+    @Autowired
+    TestData data;
+    @Autowired
+    VisitRepository visits;
+    @Autowired
+    LinkRepository links;
+
+    User admin;
+    Link link;
+
+    @BeforeEach
+    void setUp() {
+        data.reset();
+        admin = data.admin("admin");
+        link = data.link(data.domain("go.example.com", admin), "abc", "https://example.com");
+    }
+
+    private RequestPostProcessor login(User u) {
+        return user(new BlinderUserDetails(u));
+    }
+
+    @Test
+    void globalPageShowsTotals() throws Exception {
+        Instant now = Instant.now().minusSeconds(30);
+        data.visit(link, VisitOutcome.REDIRECTED, now, "203.0.113.1");
+        data.visit(link, VisitOutcome.DENIED, now, "203.0.113.2");
+
+        mvc.perform(get("/_/stats").with(login(admin)))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("go.example.com/abc")))
+                .andExpect(content().string(containsString("/_/vendor/chart.js/")))
+                .andExpect(content().string(containsString("DENIED")));
+        mvc.perform(get("/_/links/{id}/stats", link.getId()).with(login(admin)))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void anotherOwnersLinkIs404() throws Exception {
+        User other = data.admin("other");
+        mvc.perform(get("/_/links/{id}/stats", link.getId()).with(login(other))).andExpect(status().isNotFound());
+        mvc.perform(get("/_/links/{id}/stats.csv", link.getId()).with(login(other))).andExpect(status().isNotFound());
+    }
+
+    @Test
+    void anonymousIsRedirectedToLogin() throws Exception {
+        mvc.perform(get("/_/stats")).andExpect(status().is3xxRedirection());
+        mvc.perform(get("/_/stats.csv")).andExpect(status().is3xxRedirection());
+        mvc.perform(get("/_/vendor/chart.js/4.5.1/dist/chart.umd.js")).andExpect(status().is3xxRedirection());
+    }
+
+    @Test
+    void csvNeutralisesHostileUserAgentAndKeepsOnlyPeriod() throws Exception {
+        Instant now = Instant.now().minusSeconds(30);
+        visits.saveAndFlush(new Visit(links.getReferenceById(link.getId()), admin, now, VisitOutcome.REDIRECTED, null,
+                "GET", false, "203.0.113.1", "=HYPERLINK(\"http://evil\"),x", "Chrome", "Linux", null, null, "FR", "Paris"));
+        data.visit(link, VisitOutcome.DENIED, now.minus(Duration.ofDays(3)), "203.0.113.2");
+        data.visit(link, VisitOutcome.DENIED, now.minus(Duration.ofDays(60)), "203.0.113.3");
+
+        String body = mvc.perform(get("/_/stats.csv").param("days", "7").with(login(admin)))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Content-Type", containsString("text/csv")))
+                .andExpect(header().string("Content-Disposition", containsString("blinder-stats-all-")))
+                .andReturn().getResponse().getContentAsString();
+
+        String[] lines = body.split("\r\n");
+        assertThat(lines[0]).isEqualTo("date,domaine,slug,issue,raison,methode,bot,ip,pays,ville,navigateur,os,referer,user_agent");
+        assertThat(lines).hasSize(3);
+        assertThat(body).contains("\"'=HYPERLINK(\"\"http://evil\"\"),x\"");
+        assertThat(lines[2]).contains("go.example.com,abc,REDIRECTED");
+    }
+
+    @Test
+    void unknownPeriodFallsBackToThirtyDays() throws Exception {
+        mvc.perform(get("/_/stats").param("days", "9999").with(login(admin)))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("<strong>30 j</strong>")));
+    }
+
+    @Test
+    void chartScriptIsServedToLoggedInAdmin() throws Exception {
+        mvc.perform(get("/_/vendor/chart.js/4.5.1/dist/chart.umd.js").with(login(admin)))
+                .andExpect(status().isOk());
+    }
+}

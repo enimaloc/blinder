@@ -23,3 +23,10 @@ th, td { text-align: left; padding: .5rem; border-bottom: 1px solid var(--line);
 .badge-protected { border-color: var(--accent); color: var(--accent); }
 fieldset { border: 1px solid var(--line); border-radius: 4px; margin: 1rem 0; }
 textarea { width: 100%; padding: .4rem .5rem; border: 1px solid var(--line); border-radius: 4px; background: transparent; color: inherit; }
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: .75rem; margin: 1rem 0; }
+.card { border: 1px solid var(--line); border-radius: 6px; padding: .75rem; display: flex; flex-direction: column; }
+.card strong { font-size: 1.6rem; }
+.muted { color: var(--muted); font-size: .85em; }
+.chart { position: relative; height: 280px; }
+.tops { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 0 1.5rem; }
+ul.plain { list-style: none; padding: 0; }
