@@ -108,6 +108,7 @@ class LotTwoEndToEndTest {
                 .andExpect(status().isFound())
                 .andExpect(redirectedUrl("https://example.com/plans"));
         mvc.perform(get("http://vault.example.com/plans").param("pw", "open-sesame"))
-                .andExpect(status().isFound());
+                .andExpect(status().isFound())
+                .andExpect(redirectedUrl("https://example.com/plans"));
     }
 }
