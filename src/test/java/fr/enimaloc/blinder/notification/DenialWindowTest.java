@@ -35,7 +35,7 @@ class DenialWindowTest {
     }
 
     final MutableClock clock = new MutableClock();
-    final DenialWindow window = new DenialWindow(3, Duration.ofMinutes(10), clock, 1000);
+    final DenialWindow window = new DenialWindow(3, Duration.ofMinutes(10), clock);
 
     @Test
     void firesAtThresholdThenStartsOver() {
@@ -96,18 +96,13 @@ class DenialWindowTest {
     }
 
     @Test
-    void theNumberOfTrackedLinksIsBounded() {
-        DenialWindow bounded = new DenialWindow(3, Duration.ofMinutes(10), clock, 2);
-        UUID oldest = UUID.randomUUID();
-        UUID middle = UUID.randomUUID();
-        UUID newest = UUID.randomUUID();
-        bounded.record(oldest, T0);
-        bounded.record(middle, T0.plusSeconds(1));
-        bounded.record(middle, T0.plusSeconds(2));
-        bounded.record(newest, T0.plusSeconds(3));
-
-        assertThat(bounded.trackedLinks()).isEqualTo(2);
-        // le lien évincé est celui dont le dernier refus est le plus ancien : « middle » est toujours compté
-        assertThat(bounded.record(middle, T0.plusSeconds(4))).isTrue();
+    void manyOtherLinksCannotPushOutARecentlyDeniedLink() {
+        UUID target = UUID.randomUUID();
+        window.record(target, T0);
+        window.record(target, T0.plusSeconds(1));
+        for (int i = 0; i < 20_000; i++) {
+            window.record(UUID.randomUUID(), T0.plusSeconds(2));
+        }
+        assertThat(window.record(target, T0.plusSeconds(3))).isTrue();
     }
 }

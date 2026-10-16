@@ -14,35 +14,32 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Fenêtre glissante en mémoire des refus par lien (perdue au redémarrage, c'est voulu). Les liens dont tous les refus
- * sont sortis de la fenêtre sont oubliés (purge au plus une fois par fenêtre, lors d'un enregistrement) et le nombre
- * de liens suivis est borné : au-delà, le lien au dernier refus le plus ancien est évincé.
+ * sont sortis de la fenêtre sont oubliés (purge au plus une fois par fenêtre, lors d'un enregistrement). Pas de
+ * plafond avec éviction : évincer un lien remettrait son compte à zéro et permettrait d'étouffer son alerte. La taille
+ * reste bornée par le nombre de liens ayant l'alerte « refus répétés » activée et un refus récent.
  */
 @Component
 public class DenialWindow {
 
-    static final int MAX_TRACKED_LINKS = 10_000;
-
     private final int threshold;
     private final Duration window;
     private final Clock clock;
-    private final int maxTrackedLinks;
     private final Map<UUID, Deque<Instant>> denials = new ConcurrentHashMap<>();
     private volatile Instant nextPurge = Instant.MIN;
 
     @Autowired
     public DenialWindow(NotificationProperties properties, Clock clock) {
-        this(properties.denials().threshold(), properties.denials().window(), clock, MAX_TRACKED_LINKS);
+        this(properties.denials().threshold(), properties.denials().window(), clock);
     }
 
     DenialWindow(int threshold, Duration window) {
-        this(threshold, window, Clock.systemUTC(), MAX_TRACKED_LINKS);
+        this(threshold, window, Clock.systemUTC());
     }
 
-    DenialWindow(int threshold, Duration window, Clock clock, int maxTrackedLinks) {
+    DenialWindow(int threshold, Duration window, Clock clock) {
         this.threshold = threshold;
         this.window = window;
         this.clock = clock;
-        this.maxTrackedLinks = maxTrackedLinks;
     }
 
     /**
@@ -52,9 +49,6 @@ public class DenialWindow {
         Instant now = clock.instant();
         if (!now.isBefore(nextPurge)) {
             purge(now);
-        }
-        if (!denials.containsKey(linkId) && denials.size() >= maxTrackedLinks) {
-            makeRoom(now);
         }
         boolean[] fired = new boolean[1];
         // compute() est atomique par clé : deux threads ne peuvent pas déclencher deux fois pour le même lot de refus.
@@ -84,26 +78,6 @@ public class DenialWindow {
     private static boolean isStale(Deque<Instant> deque, Instant oldest) {
         Instant last = deque.peekLast();
         return last == null || last.isBefore(oldest);
-    }
-
-    /** Plafond atteint : purge forcée, puis éviction du lien au dernier refus le plus ancien si nécessaire. */
-    private void makeRoom(Instant now) {
-        purge(now);
-        while (denials.size() >= maxTrackedLinks) {
-            UUID victim = null;
-            Instant victimLast = null;
-            for (Map.Entry<UUID, Deque<Instant>> entry : denials.entrySet()) {
-                Instant last = entry.getValue().peekLast();
-                if (victim == null || last == null || last.isBefore(victimLast)) {
-                    victim = entry.getKey();
-                    victimLast = last == null ? Instant.MIN : last;
-                }
-            }
-            if (victim == null) {
-                return;
-            }
-            denials.remove(victim);
-        }
     }
 
     /** Nombre de liens suivis (tests). */

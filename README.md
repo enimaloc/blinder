@@ -187,7 +187,7 @@ Tout autre changement (cible, tags, métadonnées, protections…) ne réarme ri
 | `blinder.geoip.database` | vide | Chemin de la base GeoLite2 `.mmdb` |
 | `blinder.notifications.mail-from` | `blinder@localhost` | Expéditeur des e-mails |
 | `blinder.notifications.denials.threshold` | `10` | Refus déclenchant l'alerte |
-| `blinder.notifications.denials.window` | `10m` | Fenêtre glissante de comptage des refus (en mémoire, 10 000 liens suivis au plus) |
+| `blinder.notifications.denials.window` | `10m` | Fenêtre glissante de comptage des refus (en mémoire ; un lien sans refus récent est oublié) |
 | `blinder.notifications.denials.cooldown` | `1h` | Silence après une alerte de refus |
 | `blinder.scheduling.enabled` | `true` | Active les tâches planifiées (purge, envois, expiration) |
 | `spring.mail.*` | vide | Serveur SMTP |
