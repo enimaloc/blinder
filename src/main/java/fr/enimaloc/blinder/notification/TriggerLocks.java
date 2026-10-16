@@ -35,8 +35,8 @@ public class TriggerLocks {
 
     /**
      * Prend le verrou de (lien, type) jusqu'à la fin de la transaction courante ; {@code false} si l'attente dépasse
-     * {@link NotificationProperties#triggerLockWait()} (l'appelant renonce alors pour cette fois). Hors transaction, le verrou est rendu tout de
-     * suite : il n'a de sens qu'avec une transaction.
+     * {@link NotificationProperties#triggerLockWait()} (l'appelant renonce alors pour cette fois). Hors transaction,
+     * le verrou est rendu tout de suite : il n'a de sens qu'avec une transaction.
      */
     public boolean acquireForTransaction(UUID linkId, TriggerType type) {
         Key key = new Key(linkId, type);
