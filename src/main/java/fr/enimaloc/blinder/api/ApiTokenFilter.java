@@ -3,6 +3,7 @@ package fr.enimaloc.blinder.api;
 import fr.enimaloc.blinder.api.token.ApiTokenService;
 import fr.enimaloc.blinder.security.RateLimitKeys;
 import fr.enimaloc.blinder.security.RateLimiter;
+import fr.enimaloc.blinder.security.RetryAfter;
 import fr.enimaloc.blinder.user.BlinderUserDetails;
 import fr.enimaloc.blinder.user.User;
 import jakarta.servlet.FilterChain;
@@ -71,8 +72,7 @@ public class ApiTokenFilter extends OncePerRequestFilter {
     }
 
     private static void tooManyFailures(HttpServletResponse response, Duration retryAfter) throws IOException {
-        long seconds = Math.max(1, (retryAfter.toMillis() + 999) / 1000);
-        response.setHeader(HttpHeaders.RETRY_AFTER, String.valueOf(seconds));
+        RetryAfter.set(response, retryAfter);
         ApiProblems.write(response, HttpStatus.TOO_MANY_REQUESTS,
                 "Trop de jetons refusés depuis cette adresse, réessayez plus tard");
     }
