@@ -2,6 +2,7 @@ package fr.enimaloc.blinder.notification;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
+import org.hibernate.validator.constraints.time.DurationMin;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.bind.DefaultValue;
 import org.springframework.validation.annotation.Validated;
@@ -12,14 +13,15 @@ import java.time.Duration;
  * @param mailFrom        expéditeur des e-mails
  * @param denials         alerte de refus répétés
  * @param triggerLockWait attente maximale du verrou d'un déclencheur « une seule fois » ; au-delà l'alerte est
- *                        reportée au passage suivant du scanner périodique
+ *                        reportée au passage suivant du scanner périodique ;
+ *                        zéro = pas d'attente, négatif refusé au démarrage
  */
 @Validated
 @ConfigurationProperties("blinder.notifications")
 public record NotificationProperties(
         @DefaultValue("blinder@localhost") String mailFrom,
         @DefaultValue @Valid Denials denials,
-        @DefaultValue("2s") Duration triggerLockWait) {
+        @DefaultValue("2s") @DurationMin(nanos = 0) Duration triggerLockWait) {
 
     /**
      * @param threshold nombre de refus déclenchant l'alerte
