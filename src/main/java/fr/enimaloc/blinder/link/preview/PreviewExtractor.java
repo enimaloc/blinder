@@ -51,6 +51,10 @@ public final class PreviewExtractor {
     }
 
     private static String truncate(String value, int max) {
-        return value == null || value.length() <= max ? value : value.substring(0, max);
+        if (value == null || value.length() <= max) {
+            return value;
+        }
+        int end = Character.isHighSurrogate(value.charAt(max - 1)) ? max - 1 : max;
+        return value.substring(0, end);
     }
 }

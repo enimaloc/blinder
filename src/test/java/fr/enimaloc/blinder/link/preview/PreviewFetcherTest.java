@@ -50,12 +50,33 @@ class PreviewFetcherTest {
             }
             respond(ex, 200, "text/html", PAGE);
         });
+        server.createContext("/endless", ex -> endless(ex, 200, "text/html",
+                "<html><head><meta property=\"og:title\" content=\"Endless\"></head><body>", null));
+        server.createContext("/redirect-endless", ex -> endless(ex, 302, "text/html", "x", "/page"));
+        server.createContext("/plain-endless", ex -> endless(ex, 200, "text/plain", "x", null));
+        server.createContext("/drip", ex -> {
+            ex.getResponseHeaders().set("Content-Type", "text/html");
+            ex.sendResponseHeaders(200, 0);
+            try (OutputStream out = ex.getResponseBody()) {
+                out.write("<html><head>".getBytes(StandardCharsets.UTF_8));
+                out.flush();
+                while (true) {
+                    Thread.sleep(2_000);
+                    out.write('x');
+                    out.flush();
+                }
+            } catch (IOException | InterruptedException ignored) {
+                // client gone
+            }
+        });
         server.setExecutor(java.util.concurrent.Executors.newCachedThreadPool());
         server.start();
     }
 
     @AfterEach
     void stop() {
+        permissive.close();
+        only127001.close();
         server.stop(0);
     }
 
@@ -67,6 +88,25 @@ class PreviewFetcherTest {
             out.write(bytes);
         } catch (IOException ignored) {
             // client stopped reading (body cap)
+        }
+    }
+
+    static void endless(HttpExchange ex, int status, String type, String prefix, String location)
+            throws IOException {
+        ex.getResponseHeaders().set("Content-Type", type);
+        if (location != null) {
+            ex.getResponseHeaders().set("Location", location);
+        }
+        ex.sendResponseHeaders(status, 0);
+        byte[] chunk = "x".repeat(16384).getBytes(StandardCharsets.UTF_8);
+        try (OutputStream out = ex.getResponseBody()) {
+            out.write(prefix.getBytes(StandardCharsets.UTF_8));
+            while (true) {
+                out.write(chunk);
+                out.flush();
+            }
+        } catch (IOException ignored) {
+            // client disconnected
         }
     }
 
@@ -127,5 +167,34 @@ class PreviewFetcherTest {
         assertThat(permissive.fetch("file:///etc/passwd")).isEmpty();
         assertThat(permissive.fetch("ftp://127.0.0.1/")).isEmpty();
         assertThat(permissive.fetch("not a url")).isEmpty();
+    }
+
+    @Test
+    void endlessHtmlBodyIsCutByBodyCapOrDeadline() {
+        Instant start = Instant.now();
+        assertThat(permissive.fetch(base + "/endless"))
+                .contains(new PreviewData("Endless", null, null));
+        assertThat(Duration.between(start, Instant.now())).isLessThan(Duration.ofSeconds(5));
+    }
+
+    @Test
+    void redirectWithEndlessBodyDoesNotHang() {
+        Instant start = Instant.now();
+        assertThat(permissive.fetch(base + "/redirect-endless")).isPresent();
+        assertThat(Duration.between(start, Instant.now())).isLessThan(Duration.ofSeconds(5));
+    }
+
+    @Test
+    void nonHtmlEndlessBodyDoesNotHang() {
+        Instant start = Instant.now();
+        assertThat(permissive.fetch(base + "/plain-endless")).isEmpty();
+        assertThat(Duration.between(start, Instant.now())).isLessThan(Duration.ofSeconds(5));
+    }
+
+    @Test
+    void dripBodyIsCutByDeadline() {
+        Instant start = Instant.now();
+        assertThat(permissive.fetch(base + "/drip")).isEmpty();
+        assertThat(Duration.between(start, Instant.now())).isLessThan(Duration.ofSeconds(5));
     }
 }

@@ -6,6 +6,7 @@ import org.apache.hc.client5.http.classic.methods.HttpGet;
 import org.apache.hc.client5.http.config.ConnectionConfig;
 import org.apache.hc.client5.http.config.RequestConfig;
 import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
+import org.apache.hc.core5.http.ClassicHttpResponse;
 import org.apache.hc.client5.http.impl.classic.HttpClients;
 import org.apache.hc.client5.http.impl.io.PoolingHttpClientConnectionManager;
 import org.apache.hc.client5.http.impl.io.PoolingHttpClientConnectionManagerBuilder;
@@ -24,12 +25,16 @@ import java.net.UnknownHostException;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.Optional;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Récupère les métadonnées d'une page. Le résolveur DNS refuse toute adresse non autorisée et la connexion
  * se fait sur les adresses qu'il a validées : pas de seconde résolution, donc pas de DNS rebinding.
  */
-public class PreviewFetcher {
+public class PreviewFetcher implements AutoCloseable {
 
     static final int MAX_BYTES = 512 * 1024;
     static final int MAX_REDIRECTS = 3;
@@ -37,6 +42,11 @@ public class PreviewFetcher {
     static final String USER_AGENT = "BlinderPreview/1.0";
 
     private final CloseableHttpClient client;
+    private final ScheduledExecutorService watchdog = Executors.newSingleThreadScheduledExecutor(runnable -> {
+        Thread thread = new Thread(runnable, "preview-watchdog");
+        thread.setDaemon(true);
+        return thread;
+    });
 
     public PreviewFetcher(AddressPolicy policy) {
         DnsResolver resolver = new DnsResolver() {
@@ -53,7 +63,7 @@ public class PreviewFetcher {
 
             @Override
             public String resolveCanonicalHostname(String host) throws UnknownHostException {
-                return SystemDefaultDnsResolver.INSTANCE.resolveCanonicalHostname(host);
+                return host;
             }
         };
         PoolingHttpClientConnectionManager manager = PoolingHttpClientConnectionManagerBuilder.create()
@@ -67,6 +77,7 @@ public class PreviewFetcher {
                 .setConnectionManager(manager)
                 .setDefaultRequestConfig(RequestConfig.custom()
                         .setResponseTimeout(TIMEOUT)
+                        .setConnectionRequestTimeout(TIMEOUT)
                         .setRedirectsEnabled(false)
                         .build())
                 .disableRedirectHandling()
@@ -79,37 +90,29 @@ public class PreviewFetcher {
     private record Step(URI redirect, PreviewData data) {
     }
 
+    @Override
+    public void close() {
+        watchdog.shutdownNow();
+        try {
+            client.close();
+        } catch (IOException ignored) {
+            // nothing to do
+        }
+    }
+
     public Optional<PreviewData> fetch(String url) {
+        long deadline = System.nanoTime() + TIMEOUT.toNanoseconds();
         try {
             URI current = new URI(url);
             for (int hop = 0; hop <= MAX_REDIRECTS; hop++) {
                 if (!isHttp(current)) {
                     return Optional.empty();
                 }
-                URI requested = current;
-                HttpGet get = new HttpGet(requested);
-                get.setHeader("Accept", "text/html");
-                Step step = client.execute(get, response -> {
-                    int code = response.getCode();
-                    if (code >= 300 && code < 400) {
-                        Header location = response.getFirstHeader("Location");
-                        return location == null ? new Step(null, null)
-                                : new Step(requested.resolve(location.getValue()), null);
-                    }
-                    HttpEntity entity = response.getEntity();
-                    if (code != 200 || entity == null) {
-                        return new Step(null, null);
-                    }
-                    ContentType type = ContentType.parseLenient(entity.getContentType());
-                    if (type == null || !"text/html".equalsIgnoreCase(type.getMimeType())) {
-                        return new Step(null, null);
-                    }
-                    Charset charset = type.getCharset() != null ? type.getCharset() : StandardCharsets.UTF_8;
-                    try (InputStream in = entity.getContent()) {
-                        String html = new String(readAtMost(in, MAX_BYTES), charset);
-                        return new Step(null, PreviewExtractor.extract(html, requested.toString()));
-                    }
-                });
+                long remaining = deadline - System.nanoTime();
+                if (remaining <= 0) {
+                    return Optional.empty();
+                }
+                Step step = fetchOnce(current, deadline, remaining);
                 if (step.redirect() != null) {
                     current = step.redirect();
                     continue;
@@ -122,13 +125,52 @@ public class PreviewFetcher {
         }
     }
 
+    /** Une requête ; la connexion est toujours abandonnée (jamais vidée) et la durée totale est bornée. */
+    private Step fetchOnce(URI requested, long deadline, long remainingNanos) throws IOException {
+        HttpGet get = new HttpGet(requested);
+        get.setHeader("Accept", "text/html");
+        ScheduledFuture<?> hardAbort = watchdog.schedule(get::abort, remainingNanos, TimeUnit.NANOSECONDS);
+        ClassicHttpResponse response = null;
+        try {
+            response = client.executeOpen(null, get, null);
+            int code = response.getCode();
+            if (code >= 300 && code < 400) {
+                Header location = response.getFirstHeader("Location");
+                return location == null ? new Step(null, null)
+                        : new Step(requested.resolve(location.getValue()), null);
+            }
+            HttpEntity entity = response.getEntity();
+            if (code != 200 || entity == null) {
+                return new Step(null, null);
+            }
+            ContentType type = ContentType.parseLenient(entity.getContentType());
+            if (type == null || !"text/html".equalsIgnoreCase(type.getMimeType())) {
+                return new Step(null, null);
+            }
+            Charset charset = type.getCharset() != null ? type.getCharset() : StandardCharsets.UTF_8;
+            byte[] body = readAtMost(entity.getContent(), MAX_BYTES, deadline);
+            return new Step(null, PreviewExtractor.extract(new String(body, charset), requested.toString()));
+        } finally {
+            hardAbort.cancel(false);
+            // abandonner AVANT de fermer : la fermeture d'une réponse non abandonnée vide le corps
+            get.abort();
+            if (response != null) {
+                try {
+                    response.close();
+                } catch (IOException ignored) {
+                    // connexion déjà abandonnée
+                }
+            }
+        }
+    }
+
     private static boolean isHttp(URI uri) {
         String scheme = uri.getScheme();
         return uri.getHost() != null && scheme != null
                 && (scheme.equalsIgnoreCase("http") || scheme.equalsIgnoreCase("https"));
     }
 
-    static byte[] readAtMost(InputStream in, int max) throws IOException {
+    static byte[] readAtMost(InputStream in, int max, long deadline) throws IOException {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         byte[] buffer = new byte[8192];
         int total = 0;
@@ -136,6 +178,9 @@ public class PreviewFetcher {
         while (total < max && (read = in.read(buffer, 0, Math.min(buffer.length, max - total))) != -1) {
             out.write(buffer, 0, read);
             total += read;
+            if (System.nanoTime() - deadline > 0) {
+                throw new IOException("Délai dépassé");
+            }
         }
         return out.toByteArray();
     }

@@ -42,4 +42,11 @@ class PreviewExtractorTest {
     void emptyDocumentGivesNull() {
         assertThat(PreviewExtractor.extract("<html><head></head></html>", "https://site.example.org/")).isNull();
     }
+
+    @Test
+    void truncationDoesNotSplitSurrogatePairs() {
+        String html = "<html><head><meta property=\"og:title\" content=\"" + "a".repeat(199) + "\uD83D\uDE00\"></head></html>";
+        PreviewData data = PreviewExtractor.extract(html, "https://site.example.org/");
+        assertThat(data.title()).isEqualTo("a".repeat(199));
+    }
 }
