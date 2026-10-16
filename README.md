@@ -268,9 +268,17 @@ Les erreurs sont des `application/problem+json` (RFC 9457) :
   lue sont ignorés).
 - 401 / 429 : voir ci-dessus.
 - 404 : identifiant inconnu ou appartenant à un autre propriétaire **dans le chemin ou
-  la requête** (`/links/{id}`, `?tag=`, `?domain=`, `?link=`...).
+  la requête** (`/links/{id}`, `?tag=`, `?domain=`, `?link=`...), ou route inconnue.
+  Un paramètre de requête illisible (`?link=abc`, `?days=x`) donne un 400.
+- 405 : méthode non permise sur la route (en-tête `Allow`).
 - 409 : `version` fournie différente de la version courante, modification concurrente,
-  ou course entre deux créations du même slug.
+  ou course entre deux créations du même slug (`errors.slug` seulement si le slug est
+  effectivement pris ; sinon un 409 sans champ, par exemple deux créations simultanées
+  du même tag).
+- 500 : erreur inattendue, sans détail interne dans le corps.
+
+Sous `/_/api/`, toute erreur est un `application/problem+json`, y compris celles du
+conteneur redirigées vers `/error`.
 
 Les dates sont en ISO-8601 avec décalage (`2026-10-16T14:30:00+02:00`), dans le fuseau
 de l'administrateur. Une date envoyée est enregistrée à l'instant exact, y compris dans
