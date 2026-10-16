@@ -64,7 +64,7 @@ public class DeliveryDispatcher {
                 try {
                     boolean disabled = !delivery.getChannel().isEnabled();
                     // canal désactivé : échec définitif, pas de réessai
-                    record(delivery, disabled ? SendResult.failure("Canal désactivé") : send(delivery), now, disabled);
+                    record(delivery, disabled ? SendResult.failure("Canal désactivé") : send(delivery), disabled);
                 } catch (RuntimeException e) {
                     log.error("Envoi {} en échec inattendu", delivery.getId(), e);
                 }
@@ -89,7 +89,9 @@ public class DeliveryDispatcher {
         }
     }
 
-    private void record(NotificationDelivery sent, SendResult result, Instant now, boolean permanent) {
+    private void record(NotificationDelivery sent, SendResult result, boolean permanent) {
+        // l'envoi a pu durer : l'heure d'envoi et le délai de réessai partent de maintenant, pas du début du lot
+        Instant now = Instant.now(clock);
         transactions.executeWithoutResult(status -> deliveries.findById(sent.getId()).ifPresent(delivery -> {
             if (delivery.getStatus() != DeliveryStatus.PENDING) {
                 return;

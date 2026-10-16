@@ -117,6 +117,15 @@ class NotificationTriggersTest {
     }
 
     @Test
+    void payloadCarriesTheVisitTimeNotTheProcessingTime() {
+        settings(s -> s.setOnEachVisit(true));
+        Instant at = Instant.parse("2026-01-02T03:04:05Z");
+        triggers.onVisits(List.of(visit(VisitOutcome.REDIRECTED, null, at)));
+        assertThat(json.readTree(sent(TriggerType.VISIT).getFirst().getPayload()).get("occurredAt").asString())
+                .isEqualTo("2026-01-02T03:04:05Z");
+    }
+
+    @Test
     void linkWithoutSettingsIsIgnored() {
         triggers.onVisits(List.of(redirect()));
         assertThat(deliveries.count()).isZero();

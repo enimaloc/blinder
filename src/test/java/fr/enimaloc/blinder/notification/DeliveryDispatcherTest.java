@@ -38,6 +38,23 @@ class DeliveryDispatcherTest {
     final AtomicReference<SendResult> next = new AtomicReference<>(new SendResult(true, null));
     final List<String> sent = new ArrayList<>();
     final Instant t0 = Instant.parse("2026-10-16T10:00:00Z");
+    final AtomicReference<Instant> clockNow = new AtomicReference<>(t0);
+    final Clock clock = new Clock() {
+        @Override
+        public java.time.ZoneId getZone() {
+            return java.time.ZoneOffset.UTC;
+        }
+
+        @Override
+        public Clock withZone(java.time.ZoneId zone) {
+            return this;
+        }
+
+        @Override
+        public Instant instant() {
+            return clockNow.get();
+        }
+    };
 
     User owner;
     NotificationChannel channel;
@@ -60,7 +77,13 @@ class DeliveryDispatcherTest {
                 return next.get();
             }
         };
-        dispatcher = new DeliveryDispatcher(deliveries, List.of(sender), transactions, Clock.systemUTC());
+        dispatcher = new DeliveryDispatcher(deliveries, List.of(sender), transactions, clock);
+    }
+
+    /** Horloge et instant de répartition alignés, sauf quand un test les écarte volontairement. */
+    private void dispatchAt(Instant now) {
+        clockNow.set(now);
+        dispatcher.dispatch(now);
     }
 
     private NotificationDelivery pending(Instant due) {
@@ -76,7 +99,7 @@ class DeliveryDispatcherTest {
     void successMarksSent() {
         NotificationDelivery d = pending(t0);
         next.set(new SendResult(true, null));
-        dispatcher.dispatch(t0);
+        dispatchAt(t0);
         NotificationDelivery after = reload(d);
         assertThat(after.getStatus()).isEqualTo(DeliveryStatus.SENT);
         assertThat(after.getSentAt()).isEqualTo(t0);
@@ -91,7 +114,7 @@ class DeliveryDispatcherTest {
         Instant now = t0;
         List<Duration> expected = List.of(Duration.ofMinutes(1), Duration.ofMinutes(5), Duration.ofMinutes(30), Duration.ofHours(2));
         for (int i = 0; i < 4; i++) {
-            dispatcher.dispatch(now);
+            dispatchAt(now);
             NotificationDelivery after = reload(d);
             assertThat(after.getStatus()).isEqualTo(DeliveryStatus.PENDING);
             assertThat(after.getAttempts()).isEqualTo(i + 1);
@@ -99,23 +122,23 @@ class DeliveryDispatcherTest {
             assertThat(after.getNextAttemptAt()).isEqualTo(now.plus(expected.get(i)));
             // avant l'échéance : ignoré
             int before = sent.size();
-            dispatcher.dispatch(now.plus(expected.get(i)).minusSeconds(1));
+            dispatchAt(now.plus(expected.get(i)).minusSeconds(1));
             assertThat(sent).hasSize(before);
             now = now.plus(expected.get(i));
         }
-        dispatcher.dispatch(now);
+        dispatchAt(now);
         NotificationDelivery last = reload(d);
         assertThat(last.getStatus()).isEqualTo(DeliveryStatus.FAILED);
         assertThat(last.getAttempts()).isEqualTo(5);
         int count = sent.size();
-        dispatcher.dispatch(now.plus(Duration.ofDays(1)));
+        dispatchAt(now.plus(Duration.ofDays(1)));
         assertThat(sent).hasSize(count);
     }
 
     @Test
     void notYetDueIsSkipped() {
         pending(t0.plusSeconds(60));
-        dispatcher.dispatch(t0);
+        dispatchAt(t0);
         assertThat(sent).isEmpty();
     }
 
@@ -124,7 +147,7 @@ class DeliveryDispatcherTest {
         channel.setEnabled(false);
         channels.saveAndFlush(channel);
         NotificationDelivery d = pending(t0);
-        dispatcher.dispatch(t0);
+        dispatchAt(t0);
         assertThat(sent).isEmpty();
         NotificationDelivery after = reload(d);
         assertThat(after.getLastError()).isEqualTo("Canal désactivé");
@@ -136,7 +159,7 @@ class DeliveryDispatcherTest {
     void longErrorIsTruncatedTo500() {
         NotificationDelivery d = pending(t0);
         next.set(new SendResult(false, "e".repeat(900)));
-        dispatcher.dispatch(t0);
+        dispatchAt(t0);
         assertThat(reload(d).getLastError()).hasSize(500);
     }
 
@@ -197,5 +220,19 @@ class DeliveryDispatcherTest {
         deliveries.saveAndFlush(pending);
         assertThatThrownBy(() -> deliveryService.retry(other, pending.getId())).isInstanceOf(ResponseStatusException.class);
         assertThat(reload(pending).getStatus()).isEqualTo(DeliveryStatus.FAILED);
+    }
+
+    @Test
+    void sentAtAndBackoffUseTheTimeOfSending() {
+        NotificationDelivery ok = pending(t0);
+        clockNow.set(t0.plusSeconds(20));
+        dispatcher.dispatch(t0);
+        assertThat(reload(ok).getSentAt()).isEqualTo(t0.plusSeconds(20));
+
+        NotificationDelivery ko = pending(t0);
+        next.set(new SendResult(false, "HTTP 500"));
+        clockNow.set(t0.plusSeconds(40));
+        dispatcher.dispatch(t0);
+        assertThat(reload(ko).getNextAttemptAt()).isEqualTo(t0.plusSeconds(40).plus(Duration.ofMinutes(1)));
     }
 }

@@ -34,7 +34,7 @@ public class NotificationPayloads {
         String text = text(event, link, visit, details);
         Map<String, Object> root = new LinkedHashMap<>();
         root.put("event", event.name());
-        root.put("occurredAt", DateTimeFormatter.ISO_INSTANT.format(occurredAt));
+        root.put("occurredAt", DateTimeFormatter.ISO_INSTANT.format(visit != null ? visit.getOccurredAt() : occurredAt));
         root.put("link", link == null ? null : linkNode(link));
         root.put("visit", visit == null ? null : visitNode(visit));
         root.put("text", text);
