@@ -97,7 +97,8 @@ public class RedirectController {
         return switch (decision) {
             case Allow allow -> {
                 events.publishEvent(new LinkResolved(link.getId(), context, counted));
-                yield !context.countable() && hasUsageLimits(link) ? preview() : redirectTo(link.getTargetUrl());
+                yield !context.countable() && hasUsageLimits(link) ? preview() : redirectTo(RedirectPolicy.target(link, request.getParameterMap()),
+                        RedirectPolicy.effectiveStatus(link));
             }
             case Deny(DenyReason reason) -> {
                 events.publishEvent(new AccessDenied(link.getId(), reason, context));
@@ -160,9 +161,14 @@ public class RedirectController {
     }
 
     private static ModelAndView redirectTo(String url) {
+        return redirectTo(url, HttpStatus.FOUND);
+    }
+
+    private static ModelAndView redirectTo(String url, HttpStatus status) {
         RedirectView view = new RedirectView(url);
-        view.setStatusCode(HttpStatus.FOUND);
+        view.setStatusCode(status);
         view.setExposeModelAttributes(false);
+        view.setExpandUriTemplateVariables(false);
         return new ModelAndView(view);
     }
 }
