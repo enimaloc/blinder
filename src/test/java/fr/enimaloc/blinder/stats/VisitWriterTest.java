@@ -63,7 +63,7 @@ class VisitWriterTest {
             }
         };
         return new VisitWriter(links, visits, stats, tx, new StatsProperties(Duration.ofDays(90), capacity,
-                Duration.ofMillis(50)), blinder, geo, provider);
+                Duration.ofMillis(50), false), blinder, geo, provider);
     }
 
     VisitRecord record(UUID linkId, Instant at, String ip) {
@@ -151,11 +151,16 @@ class VisitWriterTest {
     }
 
     @Test
-    void backgroundThreadWritesAndStopFlushes() {
+    void backgroundThreadWritesAndStopFlushes() throws InterruptedException {
         VisitWriter w = writer(10, new NoopGeoLocator());
         w.start();
         try {
             w.offer(record(link.getId(), Instant.now(), "1.1.1.1"));
+            long deadline = System.nanoTime() + Duration.ofSeconds(5).toNanos();
+            while (visits.count() < 1 && System.nanoTime() < deadline) {
+                Thread.sleep(20);
+            }
+            assertThat(visits.count()).isEqualTo(1);
         } finally {
             w.stop();
         }

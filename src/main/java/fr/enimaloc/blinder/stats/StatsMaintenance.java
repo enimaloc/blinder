@@ -26,17 +26,21 @@ public class StatsMaintenance {
 
     @Scheduled(cron = "0 30 3 * * *", zone = "UTC")
     void purge() {
-        try {
-            Instant now = Instant.now(clock);
-            Duration retention = properties.retention();
-            if (retention != null && !retention.isZero() && !retention.isNegative()) {
+        Instant now = Instant.now(clock);
+        Duration retention = properties.retention();
+        if (retention != null && !retention.isZero() && !retention.isNegative()) {
+            try {
                 int removed = visits.deleteOlderThan(now.minus(retention));
                 log.info("Purge : {} visites supprimées", removed);
+            } catch (RuntimeException e) {
+                log.error("Purge des visites en échec", e);
             }
+        }
+        try {
             int old = deliveries.deleteByStatusNotAndUpdatedAtBefore(DeliveryStatus.PENDING, now.minus(DELIVERY_RETENTION));
             log.info("Purge : {} livraisons supprimées", old);
         } catch (RuntimeException e) {
-            log.error("Purge des statistiques en échec", e);
+            log.error("Purge des livraisons en échec", e);
         }
     }
 }

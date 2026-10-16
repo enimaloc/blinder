@@ -109,7 +109,9 @@ public class VisitWriter implements SmartLifecycle {
                     writeLock.unlock();
                 }
             } catch (InterruptedException e) {
+                running = false;
                 Thread.currentThread().interrupt();
+                log.error("Thread d'écriture des visites interrompu, arrêt de la boucle");
                 return;
             } catch (Throwable t) {
                 log.error("Erreur inattendue dans le thread d'écriture des visites", t);
@@ -208,7 +210,11 @@ public class VisitWriter implements SmartLifecycle {
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             }
-            thread = null;
+            if (thread.isAlive()) {
+                log.error("Le thread d'écriture des visites ne s'est pas arrêté en 5 s");
+            } else {
+                thread = null;
+            }
         }
         flush();
     }
@@ -218,9 +224,18 @@ public class VisitWriter implements SmartLifecycle {
         return running;
     }
 
-    /** S'arrête avant la base (EntityManagerFactory / DataSource). */
+    @Override
+    public boolean isAutoStartup() {
+        return properties.writerAutostart();
+    }
+
+    /**
+     * Phase 0 : démarre avant et s'arrête après le serveur web (arrêt gracieux en phase proche de MAX_VALUE),
+     * pour ne pas perdre les visites des requêtes en cours de vidange. DataSource et EntityManagerFactory ne sont
+     * pas des beans Lifecycle : ils sont détruits après l'arrêt de tous les Lifecycle.
+     */
     @Override
     public int getPhase() {
-        return Integer.MAX_VALUE - 1000;
+        return 0;
     }
 }
