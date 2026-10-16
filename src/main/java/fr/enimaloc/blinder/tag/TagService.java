@@ -83,10 +83,9 @@ public class TagService {
         }
     }
 
-    /** Retire le tag de ses liens puis le supprime ; les liens sont conservés. */
+    /** Supprime le tag ; la FK en cascade de {@code link_tags} le retire des liens, qui sont conservés. */
     public void delete(User owner, UUID id) {
         Tag tag = get(owner, id);
-        tags.detachFromLinks(tag.getId());
         tags.delete(tag);
     }
 

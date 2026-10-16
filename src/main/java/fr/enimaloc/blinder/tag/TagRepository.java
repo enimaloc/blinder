@@ -2,7 +2,6 @@ package fr.enimaloc.blinder.tag;
 
 import fr.enimaloc.blinder.user.User;
 import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -24,9 +23,4 @@ public interface TagRepository extends JpaRepository<Tag, UUID> {
     /** Nombre de liens par tag du propriétaire : {@code (UUID tagId, long count)}. */
     @Query("select t.id, count(l) from Link l join l.tags t where t.owner = :owner group by t.id")
     List<Object[]> countLinksByTag(@Param("owner") User owner);
-
-    /** Retire le tag de tous les liens (table de jointure). */
-    @Modifying(flushAutomatically = true, clearAutomatically = true)
-    @Query(value = "delete from link_tags where tag_id = :tagId", nativeQuery = true)
-    int detachFromLinks(@Param("tagId") UUID tagId);
 }
