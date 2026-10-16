@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html lang="fr" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="robots" content="noindex">
+    <title>Autoriser cet appareil</title>
+</head>
+<body>
+<main>
+    <h1>Autoriser cet appareil ?</h1>
+    <p>Appareil : <strong th:text="${name}">nom</strong></p>
+    <form method="post" th:action="@{/_/enroll/{token}(token=${token})}">
+        <button type="submit">Autoriser cet appareil</button>
+    </form>
+</main>
+</body>
+</html>

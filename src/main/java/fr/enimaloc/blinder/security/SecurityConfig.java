@@ -40,7 +40,8 @@ public class SecurityConfig {
             http.securityMatcher(adminRequests)
                     .addFilterBefore(new LoginRateLimitFilter(logins), UsernamePasswordAuthenticationFilter.class)
                     .authorizeHttpRequests(auth -> auth
-                            .requestMatchers("/_/login", "/_/setup", "/_/admin.css", "/error").permitAll()
+                            .requestMatchers("/_/login", "/_/setup", "/_/admin.css", "/error",
+                                    "/_/enroll/**", "/_/device/sync", "/_/device/resync").permitAll()
                             .anyRequest().hasRole("ADMIN"))
                     .formLogin(form -> form
                             .loginPage("/_/login")

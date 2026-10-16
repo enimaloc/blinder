@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html lang="fr" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="robots" content="noindex">
+    <title>Appareil autorisé</title>
+</head>
+<body>
+<main>
+    <h1>Appareil autorisé</h1>
+    <p>Reconnu sur <strong th:text="${count} + ' domaine(s)'">1 domaine(s)</strong>.</p>
+    <p>Après l'ajout d'un domaine, ouvrez <a th:href="@{/_/device/resync}">la resynchronisation</a> depuis cet appareil.</p>
+</main>
+</body>
+</html>
