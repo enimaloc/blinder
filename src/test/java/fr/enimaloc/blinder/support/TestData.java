@@ -23,17 +23,18 @@ import fr.enimaloc.blinder.notification.NotificationChannel;
 import fr.enimaloc.blinder.notification.NotificationChannelRepository;
 import fr.enimaloc.blinder.notification.NotificationDeliveryRepository;
 import fr.enimaloc.blinder.stats.Visit;
-import fr.enimaloc.blinder.tag.Tag;
-import fr.enimaloc.blinder.tag.TagRepository;
 import fr.enimaloc.blinder.stats.VisitDailyStatRepository;
 import fr.enimaloc.blinder.stats.VisitOutcome;
 import fr.enimaloc.blinder.stats.VisitRepository;
 import fr.enimaloc.blinder.stats.VisitWriter;
+import fr.enimaloc.blinder.tag.Tag;
+import fr.enimaloc.blinder.tag.TagRepository;
 import fr.enimaloc.blinder.user.Role;
 import fr.enimaloc.blinder.user.User;
 import fr.enimaloc.blinder.user.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.test.context.TestComponent;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Instant;
@@ -61,6 +62,7 @@ public class TestData {
     private final ApiTokenRepository apiTokens;
     private final TransactionTemplate transactions;
     private final VisitWriter visitWriter;
+    private final JdbcTemplate jdbc;
 
     public void reset() {
         visitWriter.flush();
@@ -75,8 +77,10 @@ public class TestData {
         deviceCredentials.deleteAllInBatch();
         deviceEnrollments.deleteAllInBatch();
         apiTokens.deleteAllInBatch();
-        // deleteAll() : charge les liens pour vider link_tags avant les tags.
-        links.deleteAll();
+        // Liaisons link_tags (et appareils autorisés) par requête native : plus besoin de charger chaque lien.
+        jdbc.update("delete from link_tags");
+        jdbc.update("delete from link_devices");
+        links.deleteAllInBatch();
         tags.deleteAllInBatch();
         devices.deleteAllInBatch();
         domains.deleteAllInBatch();
