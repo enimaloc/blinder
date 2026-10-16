@@ -8,13 +8,13 @@ import java.sql.SQLException;
 import java.util.Locale;
 
 /**
- * {@code blinder_lower(x)} : minuscules Unicode (le {@code lower()} natif de SQLite ne traite que l'ASCII).
- * Enregistrée sur chaque connexion SQLite ({@link SqliteFunctionsDataSource}) et utilisée par
- * {@link BlinderSqliteDialect} à la place de {@code lower()}.
+ * {@code lower(x)} en minuscules Unicode : remplace, connexion par connexion, le {@code lower()} natif de SQLite qui ne
+ * traite que l'ASCII. Enregistrée sur chaque connexion SQLite du pool ({@link SqliteFunctionsDataSource}) ; une connexion
+ * qui ne l'a pas garde la fonction native au lieu d'échouer.
  */
 final class SqliteUnicodeLower extends Function {
 
-    static final String NAME = "blinder_lower";
+    static final String NAME = "lower";
 
     private static final int SQLITE_NULL = 5;
 
