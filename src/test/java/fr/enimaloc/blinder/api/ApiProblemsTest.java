@@ -26,9 +26,12 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
+import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.not;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -96,6 +99,40 @@ class ApiProblemsTest {
                 .andExpect(jsonPath("$.errors").doesNotExist());
     }
 
+    @Test
+    void unknownRouteIs404Problem() throws Exception {
+        perform(get("/_/api/v1/nope"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.status").value(404))
+                .andExpect(jsonPath("$.detail").value("Introuvable"));
+    }
+
+    @Test
+    void methodNotAllowedIs405ProblemWithAllowHeader() throws Exception {
+        perform(post("/_/api/test/missing"))
+                .andExpect(status().isMethodNotAllowed())
+                .andExpect(header().string(HttpHeaders.ALLOW, containsString("GET")))
+                .andExpect(jsonPath("$.status").value(405));
+    }
+
+    @Test
+    void unexpectedExceptionIs500WithoutInternalDetail() throws Exception {
+        perform(get("/_/api/test/boom"))
+                .andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.status").value(500))
+                .andExpect(content().string(not(containsString("secret internal detail"))))
+                .andExpect(jsonPath("$.detail").value("Erreur interne"));
+    }
+
+    @Test
+    void unparsableQueryParametersAre400Problems() throws Exception {
+        perform(get("/_/api/v1/stats").param("link", "not-a-uuid")).andExpect(status().isBadRequest());
+        perform(get("/_/api/v1/stats").param("tag", "not-a-uuid")).andExpect(status().isBadRequest());
+        perform(get("/_/api/v1/stats").param("days", "abc")).andExpect(status().isBadRequest());
+        perform(get("/_/api/v1/links").param("domain", "x")).andExpect(status().isBadRequest());
+        perform(get("/_/api/v1/links").param("page", "x")).andExpect(status().isBadRequest());
+    }
+
     record Body(@NotBlank(message = "Nom requis") String name) {
     }
 
@@ -125,6 +162,11 @@ class ApiProblemsTest {
         @GetMapping("/optimistic")
         void optimistic() {
             throw new ObjectOptimisticLockingFailureException(Object.class, "id");
+        }
+
+        @GetMapping("/boom")
+        void boom() {
+            throw new IllegalStateException("secret internal detail");
         }
 
         @GetMapping("/integrity")

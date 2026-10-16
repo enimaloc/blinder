@@ -34,6 +34,20 @@ public class ApiProblems extends ResponseEntityExceptionHandler {
     static final String STALE = "Modifié entre-temps";
     static final String CONFLICT = "Conflit avec une donnée existante";
     static final String UNREADABLE = "Corps de requête illisible";
+    static final String UNREADABLE_REQUEST = "Requête invalide";
+    static final String INTERNAL = "Erreur interne";
+
+    /** Texte français fixe d'un statut d'erreur sans détail applicatif (jamais le message d'une exception). */
+    static String detailFor(HttpStatusCode status) {
+        return switch (status.value()) {
+            case 400 -> UNREADABLE_REQUEST;
+            case 404 -> "Introuvable";
+            case 405 -> "Méthode non autorisée";
+            case 406 -> "Format de réponse non disponible";
+            case 415 -> "Type de contenu non pris en charge";
+            default -> status.is5xxServerError() ? INTERNAL : "Requête refusée";
+        };
+    }
 
     @ExceptionHandler(FieldErrorException.class)
     ProblemDetail fieldError(FieldErrorException e) {
