@@ -57,6 +57,9 @@ import java.io.StringWriter;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.Set;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
+
 import java.util.UUID;
 import java.time.temporal.ChronoUnit;
 
@@ -105,6 +108,12 @@ abstract class AbstractPersistenceTest {
 
     @Autowired
     fr.enimaloc.blinder.stats.StatsQuery statsQuery;
+    @Autowired
+    fr.enimaloc.blinder.tag.TagService tagService;
+    @Autowired
+    fr.enimaloc.blinder.user.UserRepository users;
+    @PersistenceContext
+    EntityManager entityManager;
 
     @Autowired
     PlatformTransactionManager transactionManager;
@@ -644,6 +653,46 @@ abstract class AbstractPersistenceTest {
             Link found = links.findById(link.getId()).orElseThrow();
             assertThat(found.getTags()).extracting(Tag::getName).containsExactly("b");
         });
+    }
+
+    private long count(String table, String column, UUID id) {
+        return new TransactionTemplate(transactionManager).execute(status -> ((Number) entityManager
+                .createNativeQuery("select count(*) from " + table + " where " + column + " = ?1")
+                .setParameter(1, id.toString()).getSingleResult()).longValue());
+    }
+
+    @Test
+    void deletingTagThroughServiceKeepsLinkAndRemovesJoinRow() {
+        Link link = data.link(domain, "tagged", "https://example.com");
+        Tag a = data.tag(owner, "a");
+        data.tagLink(link, a);
+        assertThat(count("link_tags", "tag_id", a.getId())).isEqualTo(1);
+
+        tagService.delete(owner, a.getId());
+
+        assertThat(tags.findById(a.getId())).isEmpty();
+        assertThat(links.findById(link.getId())).isPresent();
+        assertThat(count("link_tags", "tag_id", a.getId())).isZero();
+        assertThat(count("link_tags", "link_id", link.getId())).isZero();
+    }
+
+    @Test
+    void deletingUserCascadesToTagsJoinRowsAndTokens() {
+        User other = data.admin("other");
+        Link link = data.link(domain, "tagged", "https://example.com");
+        Tag tag = data.tag(other, "t");
+        data.tagLink(link, tag);
+        data.apiToken(other, "ci");
+        assertThat(count("link_tags", "tag_id", tag.getId())).isEqualTo(1);
+        assertThat(count("api_tokens", "owner_id", other.getId())).isEqualTo(1);
+
+        users.deleteById(other.getId());
+        users.flush();
+
+        assertThat(count("tags", "owner_id", other.getId())).isZero();
+        assertThat(count("link_tags", "tag_id", tag.getId())).isZero();
+        assertThat(count("api_tokens", "owner_id", other.getId())).isZero();
+        assertThat(links.findById(link.getId())).isPresent();
     }
 
     @Test
