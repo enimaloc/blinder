@@ -8,6 +8,9 @@ par appareil autorisé, IP autorisée ou mot de passe.
 La pile `deploy/docker-compose.yml` lance Traefik (HTTPS, certificat wildcard
 Let's Encrypt), Blinder et PostgreSQL.
 
+L'image est publiée sur `ghcr.io/enimaloc/blinder` à chaque tag `v*` (tests exécutés
+à chaque push et pull request).
+
 ### Démarrage rapide
 
 ```
