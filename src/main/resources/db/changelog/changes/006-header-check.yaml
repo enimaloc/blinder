@@ -1,0 +1,11 @@
+databaseChangeLog:
+  - changeSet:
+      id: 006-header-check
+      author: blinder
+      changes:
+        - createTable:
+            tableName: link_header_checks
+            columns:
+              - column: { name: link_id, type: char(36), constraints: { primaryKey: true, nullable: false, foreignKeyName: fk_link_header_checks_link, references: links(id), deleteCascade: true } }
+              - column: { name: header_name, type: varchar(100), constraints: { nullable: false } }
+              - column: { name: expected_value, type: varchar(500), constraints: { nullable: false } }

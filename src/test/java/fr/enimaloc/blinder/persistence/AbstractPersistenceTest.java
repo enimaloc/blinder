@@ -15,6 +15,9 @@ import fr.enimaloc.blinder.link.Link;
 import fr.enimaloc.blinder.link.LinkEditService;
 import fr.enimaloc.blinder.link.LinkForm;
 import fr.enimaloc.blinder.link.LinkRepository;
+import fr.enimaloc.blinder.link.check.LinkHeaderCheck;
+import fr.enimaloc.blinder.link.check.LinkHeaderCheckRepository;
+import fr.enimaloc.blinder.link.check.LinkHeaderCheckService;
 import fr.enimaloc.blinder.link.LinkService;
 import fr.enimaloc.blinder.link.MetaMode;
 import fr.enimaloc.blinder.link.UsageCounter;
@@ -137,6 +140,10 @@ abstract class AbstractPersistenceTest {
     LinkEditService linkEdits;
     @Autowired
     LinkNotificationService linkNotifications;
+    @Autowired
+    LinkHeaderCheckRepository headerChecks;
+    @Autowired
+    LinkHeaderCheckService headerCheckService;
     @Autowired
     DeviceService deviceService;
 
@@ -859,5 +866,75 @@ abstract class AbstractPersistenceTest {
         assertThat(deviceService.list(owner)).extracting(r -> r.device().getName(), DeviceRow::domainCount)
                 .containsExactly(Tuple.tuple("laptop", 0L),
                         Tuple.tuple("phone", 2L));
+    }
+
+    @Test
+    void headerCheckIsCreatedReplacedAndRemoved() {
+        Link link = data.link(domain, "hdr", "https://example.com/h");
+        assertThat(headerChecks.findByLinkId(link.getId())).isEmpty();
+
+        assertThat(headerCheckService.apply(link, "X-Token", "abc")).isTrue();
+        LinkHeaderCheck created = headerChecks.findByLinkId(link.getId()).orElseThrow();
+        assertThat(created.getLinkId()).isEqualTo(link.getId());
+        assertThat(created.getHeaderName()).isEqualTo("X-Token");
+        assertThat(created.getExpectedValue()).isEqualTo("abc");
+
+        // Identique : rien ne change ; remplacement : une seule ligne.
+        assertThat(headerCheckService.apply(link, "X-Token", "abc")).isFalse();
+        assertThat(headerCheckService.apply(link, "X-Other", "def")).isTrue();
+        assertThat(headerChecks.findAll()).hasSize(1);
+        assertThat(headerChecks.findByLinkId(link.getId()).orElseThrow().getHeaderName()).isEqualTo("X-Other");
+
+        assertThat(headerCheckService.apply(link, null, null)).isTrue();
+        assertThat(headerChecks.findByLinkId(link.getId())).isEmpty();
+        assertThat(headerCheckService.apply(link, null, null)).isFalse();
+    }
+
+    @Test
+    void headerCheckRoundTripsLongestValues() {
+        Link link = data.link(domain, "long", "https://example.com/l");
+        headerCheckService.apply(link, "a".repeat(100), "v".repeat(500));
+        LinkHeaderCheck found = headerChecks.findByLinkId(link.getId()).orElseThrow();
+        assertThat(found.getHeaderName()).hasSize(100);
+        assertThat(found.getExpectedValue()).hasSize(500);
+    }
+
+    @Test
+    void headerChecksOfSeveralLinksAreLoadedAtOnceAndFilteredByOwner() {
+        Link first = data.link(domain, "un", "https://example.com/1");
+        Link second = data.link(domain, "deux", "https://example.com/2");
+        data.link(domain, "trois", "https://example.com/3");
+        headerCheckService.apply(first, "X-A", "1");
+        headerCheckService.apply(second, "X-B", "2");
+        User stranger = data.admin("stranger");
+        Link foreign = data.link(data.domain("foreign.example.com", stranger), "autre", "https://example.com/x");
+        headerCheckService.apply(foreign, "X-C", "3");
+
+        var byLink = headerCheckService.forLinks(owner,
+                List.of(first.getId(), second.getId(), foreign.getId()));
+        assertThat(byLink).containsOnlyKeys(first.getId(), second.getId());
+        assertThat(byLink.get(second.getId()).getHeaderName()).isEqualTo("X-B");
+        assertThat(headerCheckService.forLinks(owner, List.of())).isEmpty();
+    }
+
+    @Test
+    void deletingALinkCascadesToItsHeaderCheck() {
+        Link link = data.link(domain, "casc", "https://example.com/c");
+        headerCheckService.apply(link, "X-Token", "abc");
+        links.deleteById(link.getId());
+        assertThat(headerChecks.findAll()).isEmpty();
+    }
+
+    @Test
+    void deletingAUsersLinksThenTheUserLeavesNoOrphanHeaderCheck() {
+        User other = data.admin("other");
+        Link link = data.save(new Link(domain, "mine", "https://example.com/m", other));
+        headerCheckService.apply(link, "X-Token", "abc");
+        Link kept = data.link(domain, "kept", "https://example.com/k");
+        headerCheckService.apply(kept, "X-Token", "abc");
+        // Les liens ne cascadent pas depuis l'utilisateur : on supprime les siens, puis lui.
+        links.deleteById(link.getId());
+        users.deleteById(other.getId());
+        assertThat(headerChecks.findAll()).extracting(LinkHeaderCheck::getLinkId).containsExactly(kept.getId());
     }
 }
