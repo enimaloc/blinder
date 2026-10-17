@@ -23,6 +23,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 class HeaderCheckClientTest {
 
@@ -218,11 +219,40 @@ class HeaderCheckClientTest {
             assertThat(real.passes("http://localhost:" + port + "/ok", "X-Blinder-Check", "sesame")).isFalse();
             assertThat(real.passes("http://10.0.0.1/ok", "X-Blinder-Check", "sesame")).isFalse();
             assertThat(real.passes("http://169.254.169.254/latest/meta-data", "X-Blinder-Check", "sesame")).isFalse();
-            assertThat(real.passes("http://[::1]:" + port + "/ok", "X-Blinder-Check", "sesame")).isFalse();
         } finally {
             real.close();
         }
         assertThat(requests).isEmpty();
+    }
+
+    @Test
+    void publicPolicyRefusesIpv6LoopbackThatIsActuallyReachable() throws IOException {
+        HttpServer v6;
+        try {
+            v6 = HttpServer.create(new InetSocketAddress(InetAddress.getByName("::1"), 0), 0);
+        } catch (IOException e) {
+            assumeTrue(false, "boucle locale IPv6 indisponible");
+            return;
+        }
+        List<String> seen = new CopyOnWriteArrayList<>();
+        v6.createContext("/ok", ex -> {
+            seen.add(ex.getRequestMethod());
+            ex.getResponseHeaders().add("X-Blinder-Check", "sesame");
+            ex.sendResponseHeaders(200, -1);
+            ex.close();
+        });
+        v6.start();
+        HeaderCheckClient real = new HeaderCheckClient(new PublicAddressPolicy());
+        try {
+            String url = "http://[::1]:" + v6.getAddress().getPort() + "/ok";
+            // joignable avec une politique permissive : le refus ci-dessous vient bien de la politique
+            assertThat(permissive.passes(url, "X-Blinder-Check", "sesame")).isTrue();
+            assertThat(real.passes(url, "X-Blinder-Check", "sesame")).isFalse();
+            assertThat(seen).containsExactly("HEAD");
+        } finally {
+            real.close();
+            v6.stop(0);
+        }
     }
 
     @Test
