@@ -1,6 +1,7 @@
 package fr.enimaloc.blinder.link.check;
 
 import fr.enimaloc.blinder.link.Link;
+import fr.enimaloc.blinder.link.LinkForm;
 import fr.enimaloc.blinder.user.User;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -32,6 +33,15 @@ public class LinkHeaderCheckService {
         }
         return checks.findByOwnerAndLinkIdIn(owner, linkIds).stream()
                 .collect(Collectors.toMap(LinkHeaderCheck::getLinkId, Function.identity()));
+    }
+
+    /** Reporte le contrôle enregistré sur le formulaire d'édition. */
+    @Transactional(readOnly = true)
+    public void fillForm(LinkForm form, UUID linkId) {
+        checks.findByLinkId(linkId).ifPresent(c -> {
+            form.setHeaderName(c.getHeaderName());
+            form.setHeaderValue(c.getExpectedValue());
+        });
     }
 
     /** Valide les champs avant toute écriture du lien. */

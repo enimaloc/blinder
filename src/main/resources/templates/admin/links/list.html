@@ -29,7 +29,10 @@
         <tr th:each="row : ${rows}">
             <td><a th:href="@{/_/links/{id}(id=${row.link.id})}"
                    th:text="${row.link.domain.host} + '/' + ${row.link.slug}"></a></td>
-            <td th:text="${row.link.targetUrl}"></td>
+            <td>
+                <span th:text="${row.link.targetUrl}"></span>
+                <small th:if="${row.headerName != null}" class="guard">Contrôle d'en-tête : <code th:text="${row.headerName}"></code></small>
+            </td>
             <td>
                 <a th:each="t : ${row.tags}" class="tag" th:text="${t.name}"
                    th:style="${t.color} != null ? '--tag-color: ' + ${t.color} + '; --tag-text: ' + ${t.textColor()}"

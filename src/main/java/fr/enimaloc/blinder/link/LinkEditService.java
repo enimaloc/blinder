@@ -1,5 +1,6 @@
 package fr.enimaloc.blinder.link;
 
+import fr.enimaloc.blinder.link.check.LinkHeaderCheckService;
 import fr.enimaloc.blinder.link.preview.LinkPreviewService;
 import fr.enimaloc.blinder.notification.LinkNotificationService;
 import fr.enimaloc.blinder.tag.TagNames;
@@ -23,14 +24,17 @@ public class LinkEditService {
     private final LinkService links;
     private final LinkNotificationService notifications;
     private final LinkPreviewService previews;
+    private final LinkHeaderCheckService headerChecks;
     private final TagService tags;
     private final EntityManager entityManager;
 
     @Transactional
     public Link create(User owner, LinkForm form) {
         notifications.validate(owner, form);
+        headerChecks.validate(form.getHeaderName(), form.getHeaderValue());
         Link created = links.create(owner, form);
         tags.apply(owner, created, TagNames.parseList(form.getTags()));
+        headerChecks.apply(created, form.getHeaderName(), form.getHeaderValue());
         notifications.apply(owner, created, form);
         return created;
     }
@@ -38,11 +42,13 @@ public class LinkEditService {
     @Transactional
     public Link update(User owner, UUID id, LinkForm form) {
         notifications.validate(owner, form);
+        headerChecks.validate(form.getHeaderName(), form.getHeaderValue());
         Link updated = links.update(owner, id, form);
         tags.apply(owner, updated, TagNames.parseList(form.getTags()));
-        if (notifications.apply(owner, updated, form)) {
+        boolean headerChanged = headerChecks.apply(updated, form.getHeaderName(), form.getHeaderValue());
+        if (notifications.apply(owner, updated, form) || headerChanged) {
             // Réglages dans une table à part : sans ce verrou, deux éditions concurrentes basées sur la même
-            // version (l'une sur les notifications, l'autre sur le lien) passeraient toutes deux.
+            // version (l'une sur les notifications ou le contrôle d'en-tête, l'autre sur le lien) passeraient toutes deux.
             entityManager.lock(updated, LockModeType.OPTIMISTIC_FORCE_INCREMENT);
         }
         return updated;
