@@ -48,8 +48,10 @@ du service `traefik` et dans `.env`. Pour construire l'image localement, remplac
 
 ### DNS et certificat
 
-- Créez des enregistrements `A`/`AAAA` pour `BASE_DOMAIN` **et** `*.BASE_DOMAIN`
-  vers le serveur.
+- Créez des enregistrements `A` pour `BASE_DOMAIN` **et** `*.BASE_DOMAIN` vers le
+  serveur. N'ajoutez des `AAAA` que si IPv6 est activé dans Docker : sinon les clients
+  IPv6 arrivent par la passerelle Docker et partagent tous la même IP (listes d'IP
+  autorisées et statistiques faussées).
 - Le certificat wildcard est obtenu par challenge DNS : le serveur n'a pas besoin
   d'être joignable pour la validation, mais les identifiants API du fournisseur
   DNS doivent être renseignés. Il est stocké dans le volume `traefik-letsencrypt`.
@@ -66,7 +68,8 @@ du service `traefik` et dans `.env`. Pour construire l'image localement, remplac
   (`/data/geoip/`), définissez `BLINDER_GEOIP_DATABASE=/data/geoip/GeoLite2-City.mmdb`
   puis redémarrez `blinder`. Voir [Géolocalisation](#géolocalisation).
 - Santé : le conteneur a un `HEALTHCHECK` (`/actuator/health/readiness` sur le port
-  de gestion 8081, non publié) ; `docker compose ps` affiche son état.
+  de gestion 8081, non publié) ; `docker compose ps` affiche son état. Hors Docker, ce
+  port est aussi ouvert en local : `MANAGEMENT_SERVER_PORT` le change s'il est déjà pris.
 
 ## Déploiement derrière un reverse proxy
 
