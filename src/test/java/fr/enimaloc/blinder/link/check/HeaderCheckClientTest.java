@@ -4,6 +4,7 @@ import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import fr.enimaloc.blinder.link.preview.PublicAddressPolicy;
 import fr.enimaloc.blinder.support.SlowDnsResolver;
+import org.apache.hc.client5.http.SystemDefaultDnsResolver;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -15,7 +16,11 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -25,6 +30,7 @@ class HeaderCheckClientTest {
     String base;
     int port;
     final List<String> requests = new CopyOnWriteArrayList<>();
+    final AtomicInteger hanging = new AtomicInteger();
 
     final HeaderCheckClient permissive = new HeaderCheckClient(address -> true);
 
@@ -52,6 +58,15 @@ class HeaderCheckClientTest {
                 Thread.currentThread().interrupt();
             }
             respond(ex, 200, Map.of("X-Blinder-Check", List.of("sesame")));
+        });
+        server.createContext("/hang", ex -> {
+            hanging.incrementAndGet();
+            try {
+                Thread.sleep(6_000);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            ex.close();
         });
         server.setExecutor(Executors.newCachedThreadPool());
         server.start();
@@ -139,6 +154,59 @@ class HeaderCheckClientTest {
             assertThat(Duration.ofNanos(System.nanoTime() - start)).isLessThan(Duration.ofMillis(4_500));
         } finally {
             slowDns.close();
+        }
+    }
+
+    /** Occupe {@code count} contrôles sur /hang et attend que le serveur les ait tous reçus. */
+    List<Future<Boolean>> saturate(HeaderCheckClient client, ExecutorService callers, int count) throws Exception {
+        List<Future<Boolean>> pending = new java.util.ArrayList<>();
+        for (int i = 0; i < count; i++) {
+            pending.add(callers.submit(() -> client.passes(base + "/hang", "X-Blinder-Check", "sesame")));
+        }
+        long until = System.nanoTime() + TimeUnit.SECONDS.toNanos(2);
+        while (hanging.get() < count && System.nanoTime() < until) {
+            Thread.onSpinWait();
+        }
+        assertThat(hanging.get()).isEqualTo(count);
+        return pending;
+    }
+
+    @Test
+    void saturatedDestinationIsRefusedAtOnceWhileOthersStillWork() throws Exception {
+        int perRoute = HeaderCheckClient.MAX_CONNECTIONS_PER_ROUTE;
+        ExecutorService callers = Executors.newFixedThreadPool(perRoute);
+        try {
+            List<Future<Boolean>> pending = saturate(permissive, callers, perRoute);
+
+            long start = System.nanoTime();
+            assertThat(permissive.passes(base + "/ok", "X-Blinder-Check", "sesame")).isFalse();
+            assertThat(Duration.ofNanos(System.nanoTime() - start)).isLessThan(Duration.ofMillis(500));
+            assertThat(requests).isEmpty();
+
+            assertThat(permissive.passes("http://localhost:" + port + "/ok", "X-Blinder-Check", "sesame")).isTrue();
+            for (Future<Boolean> f : pending) {
+                assertThat(f.get(5, TimeUnit.SECONDS)).isFalse();
+            }
+            // places libérées : la destination est de nouveau contrôlée
+            assertThat(permissive.passes(base + "/ok", "X-Blinder-Check", "sesame")).isTrue();
+        } finally {
+            callers.shutdownNow();
+        }
+    }
+
+    @Test
+    void globalCapRefusesEveryDestinationAtOnceWhenFull() throws Exception {
+        HeaderCheckClient small = new HeaderCheckClient(address -> true, SystemDefaultDnsResolver.INSTANCE, 2, 2);
+        ExecutorService callers = Executors.newFixedThreadPool(2);
+        try {
+            saturate(small, callers, 2);
+            long start = System.nanoTime();
+            assertThat(small.passes("http://localhost:" + port + "/ok", "X-Blinder-Check", "sesame")).isFalse();
+            assertThat(Duration.ofNanos(System.nanoTime() - start)).isLessThan(Duration.ofMillis(500));
+            assertThat(requests).isEmpty();
+        } finally {
+            callers.shutdownNow();
+            small.close();
         }
     }
 

@@ -20,12 +20,13 @@ public final class GuardedHttpClients {
     }
 
     /**
-     * @param resolver    résolveur filtrant (il porte la politique d'adresses)
-     * @param maxTotal    connexions simultanées au plus, toutes destinations confondues
-     * @param maxPerRoute connexions simultanées au plus vers une même destination
+     * @param resolver     résolveur filtrant (il porte la politique d'adresses)
+     * @param leaseTimeout attente maximale d'une connexion libre du pool
+     * @param maxTotal     connexions simultanées au plus, toutes destinations confondues
+     * @param maxPerRoute  connexions simultanées au plus vers une même destination
      */
-    public static CloseableHttpClient create(FilteringDnsResolver resolver, Timeout timeout, String userAgent,
-                                             int maxTotal, int maxPerRoute) {
+    public static CloseableHttpClient create(FilteringDnsResolver resolver, Timeout timeout, Timeout leaseTimeout,
+                                             String userAgent, int maxTotal, int maxPerRoute) {
         PoolingHttpClientConnectionManager manager = PoolingHttpClientConnectionManagerBuilder.create()
                 .setDnsResolver(resolver)
                 .setMaxConnTotal(maxTotal)
@@ -39,7 +40,7 @@ public final class GuardedHttpClients {
                 .setConnectionManager(manager)
                 .setDefaultRequestConfig(RequestConfig.custom()
                         .setResponseTimeout(timeout)
-                        .setConnectionRequestTimeout(timeout)
+                        .setConnectionRequestTimeout(leaseTimeout)
                         .setRedirectsEnabled(false)
                         .build())
                 .disableRedirectHandling()

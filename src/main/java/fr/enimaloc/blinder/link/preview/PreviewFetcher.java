@@ -48,7 +48,7 @@ public class PreviewFetcher implements AutoCloseable {
     PreviewFetcher(AddressPolicy policy, DnsResolver system) {
         watchdog.setRemoveOnCancelPolicy(true);
         this.client = GuardedHttpClients.create(new FilteringDnsResolver(policy, system, TIMEOUT.toDuration()),
-                TIMEOUT, USER_AGENT, PoolingHttpClientConnectionManager.DEFAULT_MAX_TOTAL_CONNECTIONS,
+                TIMEOUT, TIMEOUT, USER_AGENT, PoolingHttpClientConnectionManager.DEFAULT_MAX_TOTAL_CONNECTIONS,
                 PoolingHttpClientConnectionManager.DEFAULT_MAX_CONNECTIONS_PER_ROUTE);
     }
 
