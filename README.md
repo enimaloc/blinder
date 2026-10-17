@@ -126,7 +126,8 @@ compris), avec l'agent `BlinderHeaderCheck/1.0` :
 - seule la première réponse compte, quel que soit son statut : les redirections
   ne sont pas suivies ;
 - accepté si un en-tête de ce nom (insensible à la casse) a exactement la valeur
-  attendue (espaces de début et de fin ignorés, casse de la valeur respectée) ;
+  attendue (espaces de début et de fin ignorés, casse de la valeur respectée ;
+  la valeur attendue se limite aux caractères ASCII visibles et à l'espace) ;
 - délai total de 3 s ; seules les adresses publiques sont jointes (adresses
   privées, de bouclage et lien-local refusées, connexion sur l'adresse validée à
   la résolution) ;
@@ -140,6 +141,13 @@ compris), avec l'agent `BlinderHeaderCheck/1.0` :
 Le résultat n'est jamais mis en cache, et un lien contrôlé redirige toujours en
 temporaire (301 → 302, 308 → 307) pour que le navigateur ne mémorise pas la
 redirection et ne saute pas le contrôle.
+
+Chaque visite contrôlée attend la réponse de la destination (jusqu'à 3 s). Les
+contrôles simultanés sont plafonnés, au total et par destination : au-delà, la
+visite est refusée aussitôt plutôt que mise en attente. La requête `HEAD` part
+avant que l'usage ne soit compté : si plusieurs visites se disputent le dernier
+usage d'un lien limité, la destination peut être interrogée pour une visite
+finalement refusée (lien épuisé).
 
 Compromis acceptés :
 
