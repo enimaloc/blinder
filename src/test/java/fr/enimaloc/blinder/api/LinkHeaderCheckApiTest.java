@@ -147,6 +147,12 @@ class LinkHeaderCheckApiTest {
                 .andExpect(jsonPath("$.errors['requiredHeader.value']").value("Valeur invalide"));
         mvc.perform(jsonBody(post(BASE), """
                         {"domainId":"%s","targetUrl":"https://example.org/a",
+                         "requiredHeader":{"name":"X-Token","value":"café"}}
+                        """.formatted(domain.getId())))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors['requiredHeader.value']").value("Valeur invalide"));
+        mvc.perform(jsonBody(post(BASE), """
+                        {"domainId":"%s","targetUrl":"https://example.org/a",
                          "requiredHeader":{"name":"%s","value":"%s"}}
                         """.formatted(domain.getId(), "a".repeat(101), "v".repeat(501))))
                 .andExpect(status().isBadRequest())

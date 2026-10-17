@@ -69,6 +69,27 @@ class HeaderCheckRulesTest {
                 });
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = {"café", "a\u00a0b", "日本", "emoji\uD83D\uDE00", "\u2003abc"})
+    void rejectsNonAsciiValues(String value) {
+        assertThatThrownBy(() -> HeaderCheckRules.normalize("X-Token", value))
+                .isInstanceOfSatisfying(FieldErrorException.class, e -> {
+                    assertThat(e.field()).isEqualTo("headerValue");
+                    assertThat(e.getMessage()).isEqualTo("Valeur invalide");
+                });
+    }
+
+    @Test
+    void acceptsEveryVisibleAsciiCharacter() {
+        StringBuilder all = new StringBuilder();
+        for (char c = 0x21; c <= 0x7E; c++) {
+            all.append(c);
+        }
+        String value = "a b " + all;
+        assertThat(HeaderCheckRules.normalize("X-Token", value)).get()
+                .satisfies(n -> assertThat(n.value()).isEqualTo(value));
+    }
+
     @Test
     void enforcesValueLength() {
         assertThat(HeaderCheckRules.normalize("X", "v".repeat(500))).isPresent();

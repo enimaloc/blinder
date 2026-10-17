@@ -65,7 +65,7 @@
         </fieldset>
         <fieldset>
             <legend>Contrôle d'en-tête</legend>
-            <p class="notice">Avant de rediriger, Blinder interroge la cible (requête HEAD, 3 s) : elle doit renvoyer cet en-tête avec cette valeur exacte, sinon la visite est refusée. Un lien contrôlé redirige toujours en temporaire (301 → 302, 308 → 307) pour que le navigateur ne mette pas la redirection en cache. Laissez les deux champs vides pour ne rien contrôler.</p>
+            <p class="notice">Avant de rediriger, Blinder interroge la cible (requête HEAD, 3 s) : elle doit renvoyer cet en-tête avec cette valeur exacte (caractères ASCII visibles et espaces uniquement, sans accent), sinon la visite est refusée. Un lien contrôlé redirige toujours en temporaire (301 → 302, 308 → 307) pour que le navigateur ne mette pas la redirection en cache. Laissez les deux champs vides pour ne rien contrôler.</p>
             <label for="headerName">En-tête attendu</label>
             <input id="headerName" maxlength="100" autocomplete="off" th:field="*{headerName}">
             <p class="error" th:errors="*{headerName}"></p>

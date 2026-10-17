@@ -4,7 +4,11 @@ import fr.enimaloc.blinder.common.FieldErrorException;
 
 import java.util.Optional;
 
-/** Validation et normalisation de l'en-tête attendu (spec : nom = token HTTP RFC 9110, valeur sans contrôle). */
+/**
+ * Validation et normalisation de l'en-tête attendu : nom = token HTTP (RFC 9110) ; valeur en ASCII visible (espace
+ * compris, 0x20–0x7E), seule forme qu'un en-tête reçu peut reproduire à l'identique (le client HTTP décode les octets
+ * en Latin-1 : une valeur accentuée ne correspondrait jamais et le lien refuserait tout le monde).
+ */
 public final class HeaderCheckRules {
 
     public static final int MAX_NAME = 100;
@@ -29,7 +33,7 @@ public final class HeaderCheckRules {
     public static Optional<Normalized> normalize(String rawName, String rawValue) {
         String name = rawName == null ? "" : rawName.strip();
         String value = rawValue == null ? "" : rawValue.strip();
-        if (name.isEmpty() && value.isEmpty() && !hasControl(rawValue)) {
+        if (name.isEmpty() && value.isEmpty() && !hasInvalidValueChar(rawValue)) {
             return Optional.empty();
         }
         if (name.isEmpty()) {
@@ -42,14 +46,15 @@ public final class HeaderCheckRules {
             throw new FieldErrorException(NAME_FIELD, "Nom d'en-tête invalide");
         }
         // Contrôle sur la valeur brute : un CR/LF en bordure ne doit pas être effacé en silence par le rognage.
-        if (value.length() > MAX_VALUE || hasControl(rawValue)) {
+        if (value.length() > MAX_VALUE || hasInvalidValueChar(rawValue)) {
             throw new FieldErrorException(VALUE_FIELD, "Valeur invalide");
         }
         return Optional.of(new Normalized(name, value));
     }
 
-    private static boolean hasControl(String value) {
-        return value != null && value.chars().anyMatch(Character::isISOControl);
+    /** Tout caractère hors de l'ASCII visible et de l'espace (contrôles, CR/LF, tabulation, non-ASCII). */
+    private static boolean hasInvalidValueChar(String value) {
+        return value != null && value.chars().anyMatch(c -> c < 0x20 || c > 0x7E);
     }
 
     private static boolean isTokenChar(int c) {

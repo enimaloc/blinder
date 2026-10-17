@@ -118,6 +118,10 @@ class LinkHeaderCheckAdminTest {
                 .andExpect(status().isOk())
                 .andExpect(model().attributeHasFieldErrors("form", "headerValue"))
                 .andExpect(content().string(containsString("Valeur invalide")));
+        mvc.perform(createLink("promo").param("headerName", "X-Token").param("headerValue", "café"))
+                .andExpect(status().isOk())
+                .andExpect(model().attributeHasFieldErrors("form", "headerValue"))
+                .andExpect(content().string(containsString("Valeur invalide")));
         mvc.perform(createLink("promo").param("headerName", "a".repeat(101)).param("headerValue", "abc"))
                 .andExpect(model().attributeHasFieldErrors("form", "headerName"));
         mvc.perform(createLink("promo").param("headerName", "X-Token").param("headerValue", "v".repeat(501)))
