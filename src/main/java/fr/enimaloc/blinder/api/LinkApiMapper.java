@@ -6,6 +6,8 @@ import fr.enimaloc.blinder.common.FieldErrorException;
 import fr.enimaloc.blinder.link.Link;
 import fr.enimaloc.blinder.link.LinkForm;
 import fr.enimaloc.blinder.link.LinkService;
+import fr.enimaloc.blinder.link.check.LinkHeaderCheck;
+import fr.enimaloc.blinder.link.check.LinkHeaderCheckService;
 import fr.enimaloc.blinder.notification.LinkNotificationService;
 import fr.enimaloc.blinder.notification.LinkNotificationSettings;
 import fr.enimaloc.blinder.notification.NotificationChannel;
@@ -46,19 +48,23 @@ public class LinkApiMapper {
             "notifyDenials", "notifications.denials",
             "notifyEachVisit", "notifications.eachVisit",
             "notifyThreshold", "notifications.threshold",
-            "notifyChannelIds", "notifications.channelIds");
+            "notifyChannelIds", "notifications.channelIds",
+            "headerName", "requiredHeader.name",
+            "headerValue", "requiredHeader.value");
 
     private final LinkService links;
     private final LinkStatusResolver statuses;
     private final LinkNotificationService notifications;
+    private final LinkHeaderCheckService headerChecks;
     private final Validator validator;
     private final ZoneId zone;
 
     public LinkApiMapper(LinkService links, LinkStatusResolver statuses, LinkNotificationService notifications,
-                         Validator validator, BlinderProperties properties) {
+                         LinkHeaderCheckService headerChecks, Validator validator, BlinderProperties properties) {
         this.links = links;
         this.statuses = statuses;
         this.notifications = notifications;
+        this.headerChecks = headerChecks;
         this.validator = validator;
         this.zone = properties.admin().timeZone();
     }
@@ -80,7 +86,7 @@ public class LinkApiMapper {
      */
     public LinkResource toResource(Link link, String url) {
         return toResource(link, url, notifications.settingsFor(link.getId()).orElse(null),
-                links.deviceIds(link.getId()));
+                links.deviceIds(link.getId()), headerChecks.checkFor(link.getId()).orElse(null));
     }
 
     /**
@@ -94,11 +100,13 @@ public class LinkApiMapper {
         List<UUID> ids = page.stream().map(Link::getId).toList();
         Map<UUID, LinkNotificationSettings> settings = notifications.settingsFor(owner, ids);
         Map<UUID, List<UUID>> devices = links.deviceIds(owner, ids);
+        Map<UUID, LinkHeaderCheck> guards = headerChecks.forLinks(owner, ids);
         return page.stream().map(link -> toResource(link, url.apply(link), settings.get(link.getId()),
-                devices.getOrDefault(link.getId(), List.of()))).toList();
+                devices.getOrDefault(link.getId(), List.of()), guards.get(link.getId()))).toList();
     }
 
-    private LinkResource toResource(Link link, String url, LinkNotificationSettings settings, List<UUID> deviceIds) {
+    private LinkResource toResource(Link link, String url, LinkNotificationSettings settings, List<UUID> deviceIds,
+                                 LinkHeaderCheck guard) {
         LinkResource.Notifications notify = settings == null ? LinkResource.Notifications.NONE
                 : new LinkResource.Notifications(settings.isOnExhausted(), settings.isOnExpired(),
                         settings.isOnDenials(), settings.isOnEachVisit(), settings.getVisitThreshold(),
@@ -132,6 +140,7 @@ public class LinkApiMapper {
                 link.getMetaImageUrl(),
                 link.getTags().stream().sorted(Comparator.comparing(Tag::getNameKey)).map(Tag::getName).toList(),
                 notify,
+                guard == null ? null : new LinkResource.RequiredHeader(guard.getHeaderName(), guard.getExpectedValue()),
                 statuses.statusOf(link).name(),
                 link.getVersion(),
                 toOffset(link.getCreatedAt()),
@@ -172,6 +181,12 @@ public class LinkApiMapper {
         n.setThreshold(r.notifications().threshold());
         n.setChannelIds(r.notifications().channelIds());
         in.setNotifications(n);
+        if (r.requiredHeader() != null) {
+            LinkInput.RequiredHeader header = new LinkInput.RequiredHeader();
+            header.setName(r.requiredHeader().name());
+            header.setValue(r.requiredHeader().value());
+            in.setRequiredHeader(header);
+        }
         in.setVersion(r.version());
         return in;
     }
@@ -227,6 +242,12 @@ public class LinkApiMapper {
             if (n.getChannelIds() != null) {
                 form.setNotifyChannelIds(new LinkedHashSet<>(n.getChannelIds()));
             }
+        }
+        // Absent ou null : pas de contrôle (le formulaire vide retire un contrôle existant) ; objet : remplacement.
+        LinkInput.RequiredHeader header = in.getRequiredHeader();
+        if (header != null) {
+            form.setHeaderName(header.getName());
+            form.setHeaderValue(header.getValue());
         }
         set(in.getVersion(), form::setVersion);
         validate(form);

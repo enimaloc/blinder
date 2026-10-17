@@ -158,6 +158,22 @@ class LinkHeaderCheckAdminTest {
     }
 
     @Test
+    void editRoundTripWithPrefilledValuesKeepsTheCheck() throws Exception {
+        Link link = data.link(domain, "promo", "https://example.com/");
+        checkService.apply(link, "X-Token", "abc");
+        LinkForm[] prefilled = new LinkForm[1];
+        mvc.perform(get("/_/links/" + link.getId()).with(asAdmin))
+                .andExpect(result -> prefilled[0] = (LinkForm) result.getModelAndView().getModel().get("form"));
+        // Le formulaire pré-rempli, renvoyé tel quel (changement d'un autre champ seulement), garde le contrôle.
+        mvc.perform(updateLink(link).param("metaTitle", "Titre")
+                        .param("headerName", prefilled[0].getHeaderName())
+                        .param("headerValue", prefilled[0].getHeaderValue()))
+                .andExpect(redirectedUrl("/_/"));
+        assertThat(links.findById(link.getId()).orElseThrow().getMetaTitle()).isEqualTo("Titre");
+        assertThat(checks.findByLinkId(link.getId()).orElseThrow().getExpectedValue()).isEqualTo("abc");
+    }
+
+    @Test
     void invalidUpdateKeepsLinkAndHeaderUnchanged() throws Exception {
         Link link = data.link(domain, "promo", "https://example.com/");
         checkService.apply(link, "X-Token", "abc");

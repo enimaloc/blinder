@@ -445,6 +445,11 @@ curl -X PUT -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json
   "$BLINDER/links/$LINK_ID"
 ```
 
+Le contrôle de destination (`requiredHeader`) suit la même règle : un `PUT` sans
+`requiredHeader` (ou à `null`) le retire, car le remplacement est complet ; à l'inverse un
+`PATCH` sans `requiredHeader` le conserve, `null` le retire et un objet
+`{"name": "...", "value": "..."}` le remplace en bloc (les deux champs sont requis).
+
 `PATCH /links/{id}` ne change que les champs présents (fusion JSON sur la
 représentation courante ; `null` efface une valeur facultative ; `notifications` est
 fusionné champ par champ) :
