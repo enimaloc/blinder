@@ -45,6 +45,8 @@ services:
     # Pour construire l'image localement au lieu de la récupérer :
     # build: ..
     restart: unless-stopped
+    # Arrêt propre (requêtes en cours, file des visites) : au-delà de 10 s, Docker tuerait le processus.
+    stop_grace_period: 40s
     depends_on:
       postgres:
         condition: service_healthy
