@@ -482,6 +482,16 @@ abstract class AbstractPersistenceTest {
     }
 
     @Test
+    void storesEveryDenyReasonOnAVisit() {
+        Link link = data.link(domain, "reasons", "https://example.com");
+        for (DenyReason reason : DenyReason.values()) {
+            Visit saved = visits.saveAndFlush(new Visit(links.getReferenceById(link.getId()), owner, Instant.now(),
+                    VisitOutcome.DENIED, reason, "GET", false, null, null, null, null, null, null, null, null));
+            assertThat(visits.findById(saved.getId()).orElseThrow().getDenyReason()).isEqualTo(reason);
+        }
+    }
+
+    @Test
     void roundTripsVisitAndDailyStat() {
         Link link = data.link(domain, "vis", "https://example.com");
         Instant at = Instant.now().truncatedTo(ChronoUnit.SECONDS);

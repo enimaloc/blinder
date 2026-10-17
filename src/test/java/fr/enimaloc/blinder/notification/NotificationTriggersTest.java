@@ -213,6 +213,16 @@ class NotificationTriggersTest {
         assertThat(sent(TriggerType.DENIALS)).hasSize(1);
     }
 
+    @Test
+    void failedHeaderChecksCountAsRepeatedDenials() {
+        settings(s -> s.setOnDenials(true));
+        Instant t = Instant.now();
+        triggers.onVisits(List.of(visit(VisitOutcome.DENIED, DenyReason.HEADER_CHECK_FAILED, t),
+                visit(VisitOutcome.DENIED, DenyReason.HEADER_CHECK_FAILED, t),
+                visit(VisitOutcome.DENIED, DenyReason.HEADER_CHECK_FAILED, t)));
+        assertThat(sent(TriggerType.DENIALS)).hasSize(1);
+    }
+
     Visit rejected(Instant at) {
         return visit(VisitOutcome.PASSWORD_REJECTED, null, at);
     }

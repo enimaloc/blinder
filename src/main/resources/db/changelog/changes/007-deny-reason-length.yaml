@@ -1,0 +1,12 @@
+databaseChangeLog:
+  # HEADER_CHECK_FAILED dépasse 16 caractères. SQLite n'applique pas les longueurs de varchar et y reconstruirait
+  # la table (clés étrangères cassées) : on ne l'élargit que sur les autres bases.
+  - changeSet:
+      id: 007-deny-reason-length
+      author: blinder
+      dbms: "!sqlite"
+      changes:
+        - modifyDataType:
+            tableName: visits
+            columnName: deny_reason
+            newDataType: varchar(32)

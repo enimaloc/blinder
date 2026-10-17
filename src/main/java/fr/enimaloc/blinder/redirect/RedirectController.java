@@ -14,10 +14,14 @@ import fr.enimaloc.blinder.link.Link;
 import fr.enimaloc.blinder.link.LinkRepository;
 import fr.enimaloc.blinder.link.SlugPolicy;
 import fr.enimaloc.blinder.link.UsageCounter;
+import fr.enimaloc.blinder.link.check.HeaderCheckClient;
+import fr.enimaloc.blinder.link.check.LinkHeaderCheck;
+import fr.enimaloc.blinder.link.check.LinkHeaderCheckService;
 import fr.enimaloc.blinder.security.RetryAfter;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -32,6 +36,7 @@ import java.net.URI;
 import java.time.Duration;
 import java.util.Optional;
 
+@Slf4j
 @Controller
 @RequiredArgsConstructor
 public class RedirectController {
@@ -45,6 +50,8 @@ public class RedirectController {
     private final ApplicationEventPublisher events;
     private final LinkPasswordThrottle throttle;
     private final LinkMetaResolver metas;
+    private final LinkHeaderCheckService headerChecks;
+    private final HeaderCheckClient headerCheckClient;
 
     @RequestMapping(value = "/{slug}", method = {RequestMethod.GET, RequestMethod.HEAD, RequestMethod.POST})
     public ModelAndView redirect(@PathVariable String slug, HttpServletRequest request, HttpServletResponse response) {
@@ -102,6 +109,21 @@ public class RedirectController {
             return interstitial(request, link);
         }
 
+        // Seule une visite qui redirigerait vers la cible interroge la destination, avant de consommer un usage.
+        String target = null;
+        boolean checked = false;
+        if (decision instanceof Allow && redirectsToTarget(link, context)) {
+            target = RedirectPolicy.target(link, request.getParameterMap());
+            Optional<LinkHeaderCheck> check = headerChecks.checkFor(link.getId());
+            checked = check.isPresent();
+            if (checked && !headerCheckClient.passes(target, check.get().getHeaderName(),
+                    check.get().getExpectedValue())) {
+                log.debug("Visite du lien {} refusée : contrôle d'en-tête de la destination non satisfait",
+                        link.getId());
+                decision = new Deny(DenyReason.HEADER_CHECK_FAILED);
+            }
+        }
+
         boolean counted = false;
         if (decision instanceof Allow && context.countable()) {
             counted = usageCounter.consume(link, context.now());
@@ -112,10 +134,9 @@ public class RedirectController {
 
         publishOutcome(decision, link, context, counted);
         return switch (decision) {
-            case Allow allow -> !context.countable() && hasUsageLimits(link)
-                    ? preview()
-                    : redirectTo(RedirectPolicy.target(link, request.getParameterMap()),
-                            RedirectPolicy.effectiveStatus(link, context.httpMethod()));
+            case Allow allow -> redirectsToTarget(link, context)
+                    ? redirectTo(target, RedirectPolicy.effectiveStatus(link, context.httpMethod(), checked))
+                    : preview();
             case Deny(DenyReason reason) -> denied(domain.get(), link, reason);
             case Challenge challenge -> passwordPage(request, challenge.rejected());
         };
@@ -200,6 +221,11 @@ public class RedirectController {
         ModelAndView mv = new ModelAndView("public/too-many-attempts");
         mv.setStatus(HttpStatus.TOO_MANY_REQUESTS);
         return mv;
+    }
+
+    /** Une visite autorisée redirige vers la cible, sauf visite non comptée d'un lien limité (page d'aperçu). */
+    private static boolean redirectsToTarget(Link link, VisitContext context) {
+        return context.countable() || !hasUsageLimits(link);
     }
 
     /** Les visites non comptées (bots, HEAD) ne doivent pas révéler la cible d'un lien limité. */

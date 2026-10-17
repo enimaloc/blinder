@@ -96,7 +96,8 @@ public class NotificationTriggers implements VisitBatchListener {
 
     private static boolean isRepeatableDenial(VisitOutcome outcome, DenyReason reason) {
         return outcome == VisitOutcome.PASSWORD_REJECTED || outcome == VisitOutcome.THROTTLED
-                || (outcome == VisitOutcome.DENIED && reason == DenyReason.FORBIDDEN);
+                || (outcome == VisitOutcome.DENIED
+                    && (reason == DenyReason.FORBIDDEN || reason == DenyReason.HEADER_CHECK_FAILED));
     }
 
     private void fireOnce(Link link, TriggerType type, Visit visit, Instant now, Set<TriggerType> done,

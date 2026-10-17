@@ -29,6 +29,8 @@ public class LinkStatusResolver {
                 case EXPIRED -> LinkStatus.EXPIRED;
                 case EXHAUSTED -> LinkStatus.EXHAUSTED;
                 case FORBIDDEN -> LinkStatus.PROTECTED;
+                // jamais rendu par l'évaluateur : le contrôle d'en-tête n'a lieu qu'à la visite
+                case HEADER_CHECK_FAILED -> LinkStatus.ACTIVE;
             };
         };
     }

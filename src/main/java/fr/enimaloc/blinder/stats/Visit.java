@@ -43,7 +43,7 @@ public class Visit extends AssignedIdEntity {
     private VisitOutcome outcome;
 
     @Enumerated(EnumType.STRING)
-    @Column(length = 16)
+    @Column(length = 32)
     private DenyReason denyReason;
 
     @Column(length = 8)
