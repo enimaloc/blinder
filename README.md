@@ -35,6 +35,10 @@ Ouvrez ensuite `https://<BLINDER_ADMIN_DOMAIN>` pour créer le compte administra
 | `BLINDER_GEOIP_DATABASE` | Facultatif : chemin de la base GeoLite2 dans le volume |
 | `SPRING_MAIL_*`, `BLINDER_NOTIFICATIONS_MAIL_FROM` | Facultatif : SMTP des notifications |
 
+Changer le sous-réseau du réseau `proxy` impose de modifier à la fois `subnet` dans
+`docker-compose.yml` et `PROXY_SUBNET_REGEX` dans `.env`. Seuls les identifiants du
+fournisseur DNS choisi (`ACME_DNS_PROVIDER`) sont lus ; les autres variables sont ignorées.
+
 Pour un autre fournisseur DNS, ajoutez ses variables lego à la section `environment`
 du service `traefik` et dans `.env`. Pour construire l'image localement, remplacez
 `image` par `build: ..` dans le service `blinder`.
