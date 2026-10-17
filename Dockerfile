@@ -1,7 +1,8 @@
 # syntax=docker/dockerfile:1
 
 # Étape de compilation : construit le jar exécutable puis l'extrait en couches.
-FROM eclipse-temurin:25-jdk AS build
+# Plateforme de la machine de build : le jar est indépendant de l'architecture, inutile de compiler sous émulation.
+FROM --platform=$BUILDPLATFORM eclipse-temurin:25-jdk AS build
 WORKDIR /workspace
 # Les fichiers Gradle d'abord, pour profiter du cache tant que les dépendances ne changent pas.
 COPY gradlew build.gradle.kts settings.gradle.kts ./
