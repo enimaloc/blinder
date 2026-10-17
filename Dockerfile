@@ -9,7 +9,8 @@ COPY gradle gradle
 RUN ./gradlew --no-daemon dependencies > /dev/null
 COPY src src
 RUN ./gradlew bootJar -x test --no-daemon \
-    && java -Djarmode=tools -jar build/libs/*-SNAPSHOT.jar extract --layers --launcher --destination /extracted
+    && java -Djarmode=tools -jar "$(find build/libs -name '*.jar' ! -name '*-plain.jar')" \
+        extract --layers --launcher --destination /extracted
 
 # Étape d'exécution : JRE seul, utilisateur non root.
 FROM eclipse-temurin:25-jre
