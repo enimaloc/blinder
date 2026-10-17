@@ -57,6 +57,8 @@ public class LinkInput {
     /** Fusionné champ par champ lors d'un PATCH. */
     @JsonMerge
     private Notifications notifications;
+    /** Remplacé en bloc (jamais fusionné) : {@code null} retire le contrôle. */
+    private RequiredHeader requiredHeader;
     private Long version;
 
     @Getter(AccessLevel.NONE)
@@ -77,10 +79,30 @@ public class LinkInput {
         if (notifications != null) {
             notifications.unknown.forEach(name -> errors.put("notifications." + name, UNKNOWN_FIELD));
         }
+        if (requiredHeader != null) {
+            requiredHeader.unknown.forEach(name -> errors.put("requiredHeader." + name, UNKNOWN_FIELD));
+        }
         return errors;
     }
 
     static final String UNKNOWN_FIELD = "Champ inconnu";
+
+    @Data
+    public static class RequiredHeader {
+        @Getter(AccessLevel.NONE)
+        @Setter(AccessLevel.NONE)
+        @EqualsAndHashCode.Exclude
+        @ToString.Exclude
+        private final Set<String> unknown = new LinkedHashSet<>();
+
+        @JsonAnySetter
+        void unknown(String name, Object ignored) {
+            unknown.add(name);
+        }
+
+        private String name;
+        private String value;
+    }
 
     @Data
     public static class Notifications {

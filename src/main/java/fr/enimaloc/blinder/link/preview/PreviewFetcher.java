@@ -3,13 +3,9 @@ package fr.enimaloc.blinder.link.preview;
 import org.apache.hc.client5.http.DnsResolver;
 import org.apache.hc.client5.http.SystemDefaultDnsResolver;
 import org.apache.hc.client5.http.classic.methods.HttpGet;
-import org.apache.hc.client5.http.config.ConnectionConfig;
-import org.apache.hc.client5.http.config.RequestConfig;
 import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
 import org.apache.hc.core5.http.ClassicHttpResponse;
-import org.apache.hc.client5.http.impl.classic.HttpClients;
 import org.apache.hc.client5.http.impl.io.PoolingHttpClientConnectionManager;
-import org.apache.hc.client5.http.impl.io.PoolingHttpClientConnectionManagerBuilder;
 import org.apache.hc.core5.http.ContentType;
 import org.apache.hc.core5.http.Header;
 import org.apache.hc.core5.http.HttpEntity;
@@ -51,26 +47,9 @@ public class PreviewFetcher implements AutoCloseable {
 
     PreviewFetcher(AddressPolicy policy, DnsResolver system) {
         watchdog.setRemoveOnCancelPolicy(true);
-        DnsResolver resolver = new FilteringDnsResolver(policy, system, TIMEOUT.toDuration());
-        PoolingHttpClientConnectionManager manager = PoolingHttpClientConnectionManagerBuilder.create()
-                .setDnsResolver(resolver)
-                .setDefaultConnectionConfig(ConnectionConfig.custom()
-                        .setConnectTimeout(TIMEOUT)
-                        .setSocketTimeout(TIMEOUT)
-                        .build())
-                .build();
-        this.client = HttpClients.custom()
-                .setConnectionManager(manager)
-                .setDefaultRequestConfig(RequestConfig.custom()
-                        .setResponseTimeout(TIMEOUT)
-                        .setConnectionRequestTimeout(TIMEOUT)
-                        .setRedirectsEnabled(false)
-                        .build())
-                .disableRedirectHandling()
-                .disableCookieManagement()
-                .disableAutomaticRetries()
-                .setUserAgent(USER_AGENT)
-                .build();
+        this.client = GuardedHttpClients.create(new FilteringDnsResolver(policy, system, TIMEOUT.toDuration()),
+                TIMEOUT, TIMEOUT, USER_AGENT, PoolingHttpClientConnectionManager.DEFAULT_MAX_TOTAL_CONNECTIONS,
+                PoolingHttpClientConnectionManager.DEFAULT_MAX_CONNECTIONS_PER_ROUTE);
     }
 
     private record Step(URI redirect, PreviewData data) {

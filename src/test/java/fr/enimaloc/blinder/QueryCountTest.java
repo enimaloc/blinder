@@ -4,6 +4,7 @@ import fr.enimaloc.blinder.device.Device;
 import fr.enimaloc.blinder.domain.Domain;
 import fr.enimaloc.blinder.link.Link;
 import fr.enimaloc.blinder.link.LinkRepository;
+import fr.enimaloc.blinder.link.check.LinkHeaderCheckService;
 import fr.enimaloc.blinder.notification.ChannelType;
 import fr.enimaloc.blinder.notification.LinkNotificationSettings;
 import fr.enimaloc.blinder.notification.LinkNotificationSettingsRepository;
@@ -60,6 +61,8 @@ abstract class QueryCountTest {
     @Autowired
     NotificationDeliveryRepository deliveries;
     @Autowired
+    LinkHeaderCheckService headerChecks;
+    @Autowired
     EntityManagerFactory emf;
 
     private record Seeded(User admin, String token, UUID firstLinkId) {
@@ -89,7 +92,7 @@ abstract class QueryCountTest {
         return statistics.getPrepareStatementCount();
     }
 
-    /** {@code rows} liens (chacun sur son domaine, avec tags, appareil, réglages de notification, visite), canaux, envois. */
+    /** {@code rows} liens (chacun sur son domaine, avec tags, appareil, réglages de notification, contrôle d'en-tête, visite), canaux, envois. */
     private Seeded seed(int rows) {
         data.reset();
         User admin = data.admin("admin");
@@ -109,6 +112,9 @@ abstract class QueryCountTest {
             link = data.save(link);
             if (first == null) {
                 first = link.getId();
+            }
+            if (i % 2 == 0) {
+                headerChecks.apply(link, "X-Token", "valeur" + i);
             }
             data.tagLink(link, shared);
             data.tagLink(link, data.tag(admin, "tag" + i));

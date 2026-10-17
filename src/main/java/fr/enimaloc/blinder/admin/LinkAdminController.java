@@ -10,6 +10,8 @@ import fr.enimaloc.blinder.link.Link;
 import fr.enimaloc.blinder.link.LinkEditService;
 import fr.enimaloc.blinder.link.LinkForm;
 import fr.enimaloc.blinder.link.LinkService;
+import fr.enimaloc.blinder.link.check.LinkHeaderCheck;
+import fr.enimaloc.blinder.link.check.LinkHeaderCheckService;
 import fr.enimaloc.blinder.link.preview.LinkPreviewService;
 import fr.enimaloc.blinder.notification.ChannelService;
 import fr.enimaloc.blinder.notification.LinkNotificationService;
@@ -38,6 +40,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Controller
@@ -58,13 +61,18 @@ public class LinkAdminController {
     private final LinkNotificationService linkNotifications;
     private final ChannelService channels;
     private final TagService tags;
+    private final LinkHeaderCheckService headerChecks;
 
     @GetMapping("/")
     public String list(@RequestParam(name = "domain", required = false) UUID domainId,
                        @RequestParam(name = "tag", required = false) UUID tagId, Model model) {
         User owner = currentUser.require();
-        List<LinkRow> rows = links.list(owner, domainId, tagId).stream()
-                .map(link -> new LinkRow(link, statuses.statusOf(link), sortedTags(link)))
+        List<Link> listed = links.list(owner, domainId, tagId);
+        // Un seul chargement groupé des contrôles d'en-tête, quel que soit le nombre de liens.
+        Map<UUID, LinkHeaderCheck> guards = headerChecks.forLinks(owner, listed.stream().map(Link::getId).toList());
+        List<LinkRow> rows = listed.stream()
+                .map(link -> new LinkRow(link, statuses.statusOf(link), sortedTags(link),
+                        guards.containsKey(link.getId()) ? guards.get(link.getId()).getHeaderName() : null))
                 .toList();
         model.addAttribute("rows", rows);
         model.addAttribute("domains", domains.list(owner));
@@ -125,6 +133,7 @@ public class LinkAdminController {
         Link link = links.get(owner, id);
         LinkForm form = links.toForm(link);
         linkNotifications.fillForm(form, id);
+        headerChecks.fillForm(form, id);
         form.setTags(tags.format(link));
         model.addAttribute("form", form);
         populateEdit(model, owner, link);

@@ -116,6 +116,15 @@ public class LinkForm {
 
     private Set<UUID> notifyChannelIds = new LinkedHashSet<>();
 
+    /**
+     * Contrôle de destination : en-tête que la cible doit renvoyer (nom, valeur exacte) pour que la redirection ait
+     * lieu. Les deux vides = pas de contrôle ; validés par {@code LinkHeaderCheckService}. Un lien contrôlé redirige
+     * toujours en temporaire (301 → 302, 308 → 307).
+     */
+    private String headerName;
+
+    private String headerValue;
+
     /** Noms séparés par des virgules ; les inconnus sont créés. */
     @Size(max = 1000)
     private String tags;

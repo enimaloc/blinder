@@ -81,6 +81,27 @@ class RedirectPolicyTest {
     }
 
     @Test
+    void headerCheckedLinkAlwaysRedirectsTemporarily() {
+        Link bare = link("https://e.com");
+        bare.setRedirectStatus(301);
+        assertThat(RedirectPolicy.effectiveStatus(bare, "GET", true)).isEqualTo(HttpStatus.FOUND);
+        assertThat(RedirectPolicy.effectiveStatus(bare, "GET", false)).isEqualTo(HttpStatus.MOVED_PERMANENTLY);
+        bare.setRedirectStatus(308);
+        assertThat(RedirectPolicy.effectiveStatus(bare, "GET", true)).isEqualTo(HttpStatus.TEMPORARY_REDIRECT);
+        assertThat(RedirectPolicy.effectiveStatus(bare, "GET", false)).isEqualTo(HttpStatus.PERMANENT_REDIRECT);
+        bare.setRedirectStatus(307);
+        assertThat(RedirectPolicy.effectiveStatus(bare, "GET", true)).isEqualTo(HttpStatus.TEMPORARY_REDIRECT);
+        bare.setRedirectStatus(302);
+        assertThat(RedirectPolicy.effectiveStatus(bare, "GET", true)).isEqualTo(HttpStatus.FOUND);
+        assertThat(RedirectPolicy.effectiveStatus(bare, "POST", true)).isEqualTo(HttpStatus.SEE_OTHER);
+
+        Link limited = link("https://e.com");
+        limited.setMaxUses(3);
+        limited.setRedirectStatus(308);
+        assertThat(RedirectPolicy.effectiveStatus(limited, "GET", true)).isEqualTo(HttpStatus.TEMPORARY_REDIRECT);
+    }
+
+    @Test
     void postIsAlwaysAnsweredWithSeeOther() {
         Link bare = link("https://e.com");
         for (int status : new int[]{301, 302, 307, 308}) {

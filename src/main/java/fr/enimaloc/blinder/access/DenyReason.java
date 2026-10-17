@@ -6,7 +6,9 @@ public enum DenyReason {
     EXPIRED(true, "Expiré"),
     EXHAUSTED(true, "Épuisé"),
     /** Protection non satisfaite sans moyen interactif (allowlist IP / appareils seuls). */
-    FORBIDDEN(false, "Interdit");
+    FORBIDDEN(false, "Interdit"),
+    /** La destination n'a pas renvoyé l'en-tête attendu (absent, différent, injoignable, délai dépassé). */
+    HEADER_CHECK_FAILED(false, "Contrôle de destination refusé");
 
     private final boolean gone;
     private final String label;

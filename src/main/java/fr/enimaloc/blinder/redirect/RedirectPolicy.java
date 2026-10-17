@@ -35,13 +35,24 @@ public final class RedirectPolicy {
      * tout le reste → 302.
      */
     public static HttpStatus effectiveStatus(Link link, String method) {
+        return effectiveStatus(link, method, false);
+    }
+
+    /**
+     * Comme {@link #effectiveStatus(Link, String)} ; avec {@code temporaryOnly} (lien soumis à un contrôle d'en-tête),
+     * jamais de redirection permanente : 301 → 302, 308 → 307, pour qu'un navigateur ne mette pas la redirection
+     * en cache et ne saute pas le contrôle aux visites suivantes.
+     */
+    public static HttpStatus effectiveStatus(Link link, String method, boolean temporaryOnly) {
         if ("POST".equalsIgnoreCase(method)) {
             return HttpStatus.SEE_OTHER;
         }
+        boolean permanentAllowed = !temporaryOnly && isBare(link);
         return switch (link.getRedirectStatus()) {
             case 307 -> HttpStatus.TEMPORARY_REDIRECT;
-            case 301 -> isBare(link) ? HttpStatus.MOVED_PERMANENTLY : HttpStatus.FOUND;
-            case 308 -> isBare(link) ? HttpStatus.PERMANENT_REDIRECT : HttpStatus.FOUND;
+            case 301 -> permanentAllowed ? HttpStatus.MOVED_PERMANENTLY : HttpStatus.FOUND;
+            case 308 -> permanentAllowed ? HttpStatus.PERMANENT_REDIRECT
+                    : temporaryOnly ? HttpStatus.TEMPORARY_REDIRECT : HttpStatus.FOUND;
             default -> HttpStatus.FOUND;
         };
     }

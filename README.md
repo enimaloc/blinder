@@ -114,6 +114,41 @@ un seul moyen valide suffit. Un lien protégé par appareils reste fermé même 
 tous ses appareils sont révoqués (il ne s'ouvre qu'avec un autre moyen configuré,
 sinon à personne) ; seule la case « Réserver aux appareils autorisés » du formulaire de lien retire cette protection (décocher les appareils ne suffit pas).
 
+### Contrôle d'en-tête de la destination
+
+Un lien peut exiger que sa destination renvoie un en-tête précis (nom et valeur
+attendue, champ « Contrôle d'en-tête » du formulaire ou `requiredHeader` de l'API).
+À chaque visite qui redirigerait vers la cible (après les protections, la page
+intermédiaire et la page d'aperçu des robots, avant de compter un usage), Blinder
+envoie une requête `HEAD` vers l'URL exacte de redirection (paramètres transmis
+compris), avec l'agent `BlinderHeaderCheck/1.0` :
+
+- seule la première réponse compte, quel que soit son statut : les redirections
+  ne sont pas suivies ;
+- accepté si un en-tête de ce nom (insensible à la casse) a exactement la valeur
+  attendue (espaces de début et de fin ignorés, casse de la valeur respectée ;
+  la valeur attendue se limite aux caractères ASCII visibles et à l'espace) ;
+- délai total de 3 s ; seules les adresses publiques sont jointes (adresses
+  privées, de bouclage et lien-local refusées, connexion sur l'adresse validée à
+  la résolution) ;
+- tout le reste (en-tête absent ou différent, délai dépassé, erreur réseau ou TLS,
+  adresse refusée) refuse la visite exactement comme une protection non
+  satisfaite : URL de refus du lien si définie, sinon 404 ou URL « introuvable »
+  du domaine. La visite refusée ne consomme pas d'usage, apparaît dans les
+  statistiques (« Contrôle de destination refusé ») et compte pour l'alerte de
+  refus répétés.
+
+Le résultat n'est jamais mis en cache, et un lien contrôlé redirige toujours en
+temporaire (301 → 302, 308 → 307) pour que le navigateur ne mémorise pas la
+redirection et ne saute pas le contrôle.
+
+Chaque visite contrôlée attend la réponse de la destination (jusqu'à 3 s). Les
+contrôles simultanés sont plafonnés, au total et par destination : au-delà, la
+visite est refusée aussitôt plutôt que mise en attente. La requête `HEAD` part
+avant que l'usage ne soit compté : si plusieurs visites se disputent le dernier
+usage d'un lien limité, la destination peut être interrogée pour une visite
+finalement refusée (lien épuisé).
+
 Compromis acceptés :
 
 - La limite agrégée par lien (50 échecs / 15 min) peut être maintenue par un
@@ -444,6 +479,11 @@ curl -X PUT -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json
        "targetUrl":"https://example.com/v2","removePassword":true}' \
   "$BLINDER/links/$LINK_ID"
 ```
+
+Le contrôle de destination (`requiredHeader`) suit la même règle : un `PUT` sans
+`requiredHeader` (ou à `null`) le retire, car le remplacement est complet ; à l'inverse un
+`PATCH` sans `requiredHeader` le conserve, `null` le retire et un objet
+`{"name": "...", "value": "..."}` le remplace en bloc (les deux champs sont requis).
 
 `PATCH /links/{id}` ne change que les champs présents (fusion JSON sur la
 représentation courante ; `null` efface une valeur facultative ; `notifications` est

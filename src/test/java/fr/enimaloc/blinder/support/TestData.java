@@ -13,6 +13,7 @@ import fr.enimaloc.blinder.domain.Domain;
 import fr.enimaloc.blinder.domain.DomainRepository;
 import fr.enimaloc.blinder.link.Link;
 import fr.enimaloc.blinder.link.LinkRepository;
+import fr.enimaloc.blinder.link.check.LinkHeaderCheckRepository;
 import fr.enimaloc.blinder.link.preview.LinkPreview;
 import fr.enimaloc.blinder.link.preview.LinkPreviewRepository;
 import fr.enimaloc.blinder.link.preview.PreviewStatus;
@@ -65,6 +66,7 @@ public class TestData {
     private final LinkNotificationSettingsRepository notificationSettings;
     private final FiredTriggerRepository firedTriggers;
     private final NotificationDeliveryRepository deliveries;
+    private final LinkHeaderCheckRepository headerChecks;
     private final TagRepository tags;
     private final ApiTokenRepository apiTokens;
     private final TransactionTemplate transactions;
@@ -81,6 +83,7 @@ public class TestData {
         dailyStats.deleteAllInBatch();
         visits.deleteAllInBatch();
         linkPreviews.deleteAllInBatch();
+        headerChecks.deleteAllInBatch();
         deviceCredentials.deleteAllInBatch();
         deviceEnrollments.deleteAllInBatch();
         apiTokens.deleteAllInBatch();

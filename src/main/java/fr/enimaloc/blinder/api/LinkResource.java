@@ -35,10 +35,15 @@ public record LinkResource(
         String metaImageUrl,
         List<String> tags,
         Notifications notifications,
+        RequiredHeader requiredHeader,
         String status,
         Long version,
         OffsetDateTime createdAt,
         OffsetDateTime updatedAt) {
+
+    /** Contrôle de destination : en-tête (nom, valeur exacte) que la cible doit renvoyer. */
+    public record RequiredHeader(String name, String value) {
+    }
 
     public record Notifications(boolean exhausted, boolean expired, boolean denials, boolean eachVisit,
                                 Integer threshold, List<UUID> channelIds) {
