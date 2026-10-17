@@ -1,0 +1,111 @@
+# Pile de production : Traefik (TLS wildcard, challenge DNS) + Blinder + PostgreSQL.
+# Toute la configuration passe par deploy/.env (copie de .env.example).
+
+name: blinder
+
+services:
+  traefik:
+    image: traefik:v3
+    restart: unless-stopped
+    command:
+      - --api=false
+      - --providers.docker=true
+      - --providers.docker.exposedByDefault=false
+      - --providers.docker.network=blinder_proxy
+      - --entrypoints.web.address=:80
+      - --entrypoints.web.http.redirections.entryPoint.to=websecure
+      - --entrypoints.web.http.redirections.entryPoint.scheme=https
+      - --entrypoints.websecure.address=:443
+      # Aucun X-Forwarded-* entrant n'est cru (comportement par défaut, rendu explicite).
+      - --entrypoints.web.forwardedHeaders.insecure=false
+      - --entrypoints.websecure.forwardedHeaders.insecure=false
+      - --certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL}
+      - --certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json
+      - --certificatesresolvers.letsencrypt.acme.dnschallenge=true
+      - --certificatesresolvers.letsencrypt.acme.dnschallenge.provider=${ACME_DNS_PROVIDER}
+    # Seuls les identifiants du fournisseur DNS sont transmis (pas le mot de passe de la base).
+    # Pour un autre fournisseur lego, ajoutez ses variables ici et dans .env.
+    environment:
+      OVH_ENDPOINT: ${OVH_ENDPOINT:-}
+      OVH_APPLICATION_KEY: ${OVH_APPLICATION_KEY:-}
+      OVH_APPLICATION_SECRET: ${OVH_APPLICATION_SECRET:-}
+      OVH_CONSUMER_KEY: ${OVH_CONSUMER_KEY:-}
+      CF_DNS_API_TOKEN: ${CF_DNS_API_TOKEN:-}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - traefik-letsencrypt:/letsencrypt
+    networks:
+      - proxy
+
+  blinder:
+    image: ${BLINDER_IMAGE:-ghcr.io/enimaloc/blinder}:${BLINDER_VERSION:-latest}
+    # Pour construire l'image localement au lieu de la récupérer :
+    # build: ..
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/blinder
+      SPRING_DATASOURCE_USERNAME: blinder
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+      BLINDER_ADMIN_DOMAIN: ${BLINDER_ADMIN_DOMAIN}
+      BLINDER_ADMIN_TIME_ZONE: ${BLINDER_ADMIN_TIME_ZONE:-UTC}
+      # Seul Traefik (sous-réseau fixe du réseau proxy) est un proxy de confiance.
+      SERVER_TOMCAT_REMOTEIP_INTERNAL_PROXIES: ${PROXY_SUBNET_REGEX}
+      # Facultatif : base GeoLite2 déposée dans le volume /data.
+      BLINDER_GEOIP_DATABASE: ${BLINDER_GEOIP_DATABASE:-}
+      SPRING_MAIL_HOST: ${SPRING_MAIL_HOST:-}
+      SPRING_MAIL_PORT: ${SPRING_MAIL_PORT:-587}
+      SPRING_MAIL_USERNAME: ${SPRING_MAIL_USERNAME:-}
+      SPRING_MAIL_PASSWORD: ${SPRING_MAIL_PASSWORD:-}
+      BLINDER_NOTIFICATIONS_MAIL_FROM: ${BLINDER_NOTIFICATIONS_MAIL_FROM:-blinder@localhost}
+    volumes:
+      - blinder-data:/data
+    networks:
+      - proxy
+      - backend
+    labels:
+      traefik.enable: "true"
+      # Le domaine de base et tout sous-domaine (liens et panel admin). $$ = « $ » littéral.
+      traefik.http.routers.blinder.rule: Host(`${BASE_DOMAIN}`) || HostRegexp(`^[a-z0-9-]+\.${BASE_DOMAIN_REGEX}$$`)
+      traefik.http.routers.blinder.entrypoints: websecure
+      traefik.http.routers.blinder.tls.certresolver: letsencrypt
+      traefik.http.routers.blinder.tls.domains[0].main: ${BASE_DOMAIN}
+      traefik.http.routers.blinder.tls.domains[0].sans: "*.${BASE_DOMAIN}"
+      traefik.http.services.blinder.loadbalancer.server.port: "8080"
+
+  postgres:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: blinder
+      POSTGRES_USER: blinder
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U blinder -d blinder"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - backend
+
+networks:
+  # Sous-réseau fixe : PROXY_SUBNET_REGEX (.env) doit le désigner exactement.
+  proxy:
+    name: blinder_proxy
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24
+  backend:
+    internal: true
+
+volumes:
+  traefik-letsencrypt:
+  blinder-data:
+  postgres-data:
