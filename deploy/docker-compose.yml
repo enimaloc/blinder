@@ -19,10 +19,10 @@ services:
       # Aucun X-Forwarded-* entrant n'est cru (comportement par défaut, rendu explicite).
       - --entrypoints.web.forwardedHeaders.insecure=false
       - --entrypoints.websecure.forwardedHeaders.insecure=false
-      - --certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL}
+      - --certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL:?ACME_EMAIL requis (voir .env.example)}
       - --certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json
       - --certificatesresolvers.letsencrypt.acme.dnschallenge=true
-      - --certificatesresolvers.letsencrypt.acme.dnschallenge.provider=${ACME_DNS_PROVIDER}
+      - --certificatesresolvers.letsencrypt.acme.dnschallenge.provider=${ACME_DNS_PROVIDER:?ACME_DNS_PROVIDER requis (voir .env.example)}
     # Seuls les identifiants du fournisseur DNS sont transmis (pas le mot de passe de la base).
     # Pour un autre fournisseur lego, ajoutez ses variables ici et dans .env.
     environment:
@@ -51,11 +51,11 @@ services:
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/blinder
       SPRING_DATASOURCE_USERNAME: blinder
-      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
-      BLINDER_ADMIN_DOMAIN: ${BLINDER_ADMIN_DOMAIN}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD requis (voir .env.example)}
+      BLINDER_ADMIN_DOMAIN: ${BLINDER_ADMIN_DOMAIN:?BLINDER_ADMIN_DOMAIN requis (voir .env.example)}
       BLINDER_ADMIN_TIME_ZONE: ${BLINDER_ADMIN_TIME_ZONE:-UTC}
       # Seul Traefik (sous-réseau fixe du réseau proxy) est un proxy de confiance.
-      SERVER_TOMCAT_REMOTEIP_INTERNAL_PROXIES: ${PROXY_SUBNET_REGEX}
+      SERVER_TOMCAT_REMOTEIP_INTERNAL_PROXIES: ${PROXY_SUBNET_REGEX:?PROXY_SUBNET_REGEX requis (voir .env.example)}
       # Facultatif : base GeoLite2 déposée dans le volume /data.
       BLINDER_GEOIP_DATABASE: ${BLINDER_GEOIP_DATABASE:-}
       SPRING_MAIL_HOST: ${SPRING_MAIL_HOST:-}
@@ -71,11 +71,11 @@ services:
     labels:
       traefik.enable: "true"
       # Le domaine de base et tout sous-domaine (liens et panel admin). $$ = « $ » littéral.
-      traefik.http.routers.blinder.rule: Host(`${BASE_DOMAIN}`) || HostRegexp(`^[a-z0-9-]+\.${BASE_DOMAIN_REGEX}$$`)
+      traefik.http.routers.blinder.rule: Host(`${BASE_DOMAIN:?BASE_DOMAIN requis (voir .env.example)}`) || HostRegexp(`^[a-z0-9-]+\.${BASE_DOMAIN_REGEX:?BASE_DOMAIN_REGEX requis (voir .env.example)}$$`)
       traefik.http.routers.blinder.entrypoints: websecure
       traefik.http.routers.blinder.tls.certresolver: letsencrypt
-      traefik.http.routers.blinder.tls.domains[0].main: ${BASE_DOMAIN}
-      traefik.http.routers.blinder.tls.domains[0].sans: "*.${BASE_DOMAIN}"
+      traefik.http.routers.blinder.tls.domains[0].main: ${BASE_DOMAIN:?BASE_DOMAIN requis (voir .env.example)}
+      traefik.http.routers.blinder.tls.domains[0].sans: "*.${BASE_DOMAIN:?BASE_DOMAIN requis (voir .env.example)}"
       traefik.http.services.blinder.loadbalancer.server.port: "8080"
 
   postgres:
@@ -84,7 +84,7 @@ services:
     environment:
       POSTGRES_DB: blinder
       POSTGRES_USER: blinder
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD requis (voir .env.example)}
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
