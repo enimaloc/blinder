@@ -38,3 +38,6 @@ out/
 
 ### Blinder runtime data ###
 /data/
+
+### Déploiement ###
+deploy/.env

@@ -1,0 +1,7 @@
+# Liste blanche : seul le nécessaire à la compilation entre dans le contexte.
+*
+!gradle
+!gradlew
+!build.gradle.kts
+!settings.gradle.kts
+!src

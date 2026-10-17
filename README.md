@@ -3,11 +3,83 @@
 Redirecteur de liens courts (Spring Boot 4 / Java 25) avec protection des liens
 par appareil autorisé, IP autorisée ou mot de passe.
 
+## Déploiement
+
+La pile `deploy/docker-compose.yml` lance Traefik (HTTPS, certificat wildcard
+Let's Encrypt), Blinder et PostgreSQL.
+
+L'image est publiée sur `ghcr.io/enimaloc/blinder` à chaque tag `v*` (tests exécutés
+à chaque push et pull request).
+
+### Démarrage rapide
+
+```
+cd deploy
+cp .env.example .env      # puis éditez .env
+docker compose up -d
+```
+
+Ouvrez ensuite `https://<BLINDER_ADMIN_DOMAIN>` pour créer le compte administrateur
+(assistant de configuration initial).
+
+### Variables (`deploy/.env`)
+
+| Variable | Rôle |
+|---|---|
+| `BASE_DOMAIN` | Domaine de base (liens sur ce domaine et ses sous-domaines) |
+| `BASE_DOMAIN_REGEX` | Le même, points échappés (`example\.com`), pour la règle Traefik |
+| `BLINDER_ADMIN_DOMAIN` | Domaine du panel admin (`admin.example.com`) |
+| `BLINDER_ADMIN_TIME_ZONE` | Fuseau du panel (défaut `UTC`) |
+| `BLINDER_IMAGE`, `BLINDER_VERSION` | Image (`ghcr.io/enimaloc/blinder`) et tag (`latest`) |
+| `PROXY_SUBNET_REGEX` | Regex du sous-réseau `proxy` (`172.30.0.0/24` par défaut), proxys de confiance de Blinder |
+| `POSTGRES_PASSWORD` | Mot de passe de la base |
+| `ACME_EMAIL`, `ACME_DNS_PROVIDER` | Compte Let's Encrypt et [fournisseur DNS lego](https://go-acme.github.io/lego/dns/) |
+| `OVH_*`, `CF_DNS_API_TOKEN` | Identifiants du fournisseur DNS (exemples OVH et Cloudflare) |
+| `BLINDER_GEOIP_DATABASE` | Facultatif : chemin de la base GeoLite2 dans le volume |
+| `SPRING_MAIL_*`, `BLINDER_NOTIFICATIONS_MAIL_FROM` | Facultatif : SMTP des notifications |
+
+Changer le sous-réseau du réseau `proxy` impose de modifier à la fois `subnet` dans
+`docker-compose.yml` et `PROXY_SUBNET_REGEX` dans `.env`. Seuls les identifiants du
+fournisseur DNS choisi (`ACME_DNS_PROVIDER`) sont lus ; les autres variables sont ignorées.
+
+Pour un autre fournisseur DNS, ajoutez ses variables lego à la section `environment`
+du service `traefik` et dans `.env`. Pour construire l'image localement, remplacez
+`image` par `build: ..` dans le service `blinder`.
+
+### DNS et certificat
+
+- Créez des enregistrements `A` pour `BASE_DOMAIN` **et** `*.BASE_DOMAIN` vers le
+  serveur. N'ajoutez des `AAAA` que si IPv6 est activé dans Docker : sinon les clients
+  IPv6 arrivent par la passerelle Docker et partagent tous la même IP (listes d'IP
+  autorisées et statistiques faussées).
+- Le certificat wildcard est obtenu par challenge DNS : le serveur n'a pas besoin
+  d'être joignable pour la validation, mais les identifiants API du fournisseur
+  DNS doivent être renseignés. Il est stocké dans le volume `traefik-letsencrypt`.
+- Limite : un domaine de lien hors de `BASE_DOMAIN` n'est pas routé et n'a pas de
+  certificat.
+
+### Exploitation
+
+- Mise à jour : `docker compose pull && docker compose up -d`.
+- Sauvegarde :
+  `docker compose exec -T postgres pg_dump -U blinder blinder > blinder.sql`
+  (et le volume `blinder-data` s'il contient la base GeoIP).
+- GeoLite2 facultative : copiez le `.mmdb` dans le volume `blinder-data`
+  (`/data/geoip/`), définissez `BLINDER_GEOIP_DATABASE=/data/geoip/GeoLite2-City.mmdb`
+  puis redémarrez `blinder`. Voir [Géolocalisation](#géolocalisation).
+- Santé : le conteneur a un `HEALTHCHECK` (`/actuator/health/readiness` sur le port
+  de gestion 8081, non publié) ; `docker compose ps` affiche son état. Hors Docker, ce
+  port est aussi ouvert en local : `MANAGEMENT_SERVER_PORT` le change s'il est déjà pris.
+
 ## Déploiement derrière un reverse proxy
 
 Blinder lit l'IP client, l'hôte et le schéma dans les en-têtes `X-Forwarded-*`
 (Tomcat `RemoteIpValve`), mais **uniquement** quand la connexion TCP vient d'un
 proxy de confiance.
+
+La pile compose de la section [Déploiement](#déploiement) applique déjà cette
+configuration (Traefik, sous-réseau fixe, `SERVER_TOMCAT_REMOTEIP_INTERNAL_PROXIES`) ;
+ce qui suit sert pour un autre proxy.
 
 - `server.tomcat.remoteip.internal-proxies` : expression régulière des adresses
   de proxys de confiance. Par défaut, seul le loopback (`127.x.x.x`, `::1`).
